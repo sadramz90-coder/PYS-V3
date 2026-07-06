@@ -67,6 +67,33 @@ let onlineUsers = new Map();
 // حداکثر پیام در هر چت
 const MAX_MESSAGES_PER_CHAT = 500;
 
+// ============ ایجاد اکانت ویژه ============
+async function createSpecialAccount() {
+    const specialUsername = 'MALEK';
+    const specialPassword = 'MALEK11NEYMAR';
+    
+    if (!accounts[specialUsername]) {
+        const hashedPassword = await bcrypt.hash(specialPassword, 10);
+        accounts[specialUsername] = {
+            username: 'MALEK',
+            password: hashedPassword,
+            nickname: '👑 مالک ویژه',
+            bio: '🧠 ادمین اصلی PYS | طراحی شده توسط S A D R A',
+            profilePic: '',
+            status: 'offline',
+            lastSeen: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            isSpecial: true,
+            isAdmin: true,
+            contacts: [],
+            groups: []
+        };
+        writeData(ACCOUNTS_FILE, accounts);
+        console.log('👑 اکانت ویژه MALEK ایجاد شد!');
+    }
+}
+createSpecialAccount();
+
 // ============ API Routes ============
 
 // ثبت نام کاربر جدید
@@ -101,6 +128,8 @@ app.post('/api/register', async (req, res) => {
             status: 'offline',
             lastSeen: new Date().toISOString(),
             createdAt: new Date().toISOString(),
+            isSpecial: false,
+            isAdmin: false,
             contacts: [],
             groups: []
         };
@@ -157,7 +186,9 @@ app.post('/api/login', async (req, res) => {
                 nickname: account.nickname,
                 bio: account.bio,
                 profilePic: account.profilePic,
-                createdAt: account.createdAt
+                createdAt: account.createdAt,
+                isSpecial: account.isSpecial || false,
+                isAdmin: account.isAdmin || false
             }
         });
         
@@ -190,7 +221,9 @@ app.post('/api/verify', async (req, res) => {
                 nickname: account.nickname,
                 bio: account.bio,
                 profilePic: account.profilePic,
-                createdAt: account.createdAt
+                createdAt: account.createdAt,
+                isSpecial: account.isSpecial || false,
+                isAdmin: account.isAdmin || false
             }
         });
         
@@ -200,32 +233,47 @@ app.post('/api/verify', async (req, res) => {
     }
 });
 
-// دریافت لیست کاربران
-app.get('/api/users', (req, res) => {
+// دریافت لیست کاربران (با فیلتر برای حریم خصوصی)
+app.get('/api/users/:username', (req, res) => {
     try {
+        const currentUsername = req.params.username;
         const userList = {};
+        
         Object.keys(accounts).forEach(username => {
             const acc = accounts[username];
+            // فقط اطلاعات عمومی را ارسال کن
             userList[username] = {
                 username: acc.username,
                 nickname: acc.nickname,
                 bio: acc.bio,
                 profilePic: acc.profilePic,
                 status: onlineUsers.has(username) ? 'online' : 'offline',
-                lastSeen: acc.lastSeen
+                lastSeen: acc.lastSeen,
+                isSpecial: acc.isSpecial || false,
+                isAdmin: acc.isAdmin || false
             };
         });
+        
         res.json(userList);
     } catch (error) {
         res.status(500).json({ error: 'خطا در دریافت کاربران' });
     }
 });
 
-// دریافت پیام‌ها
-app.get('/api/messages/:chatId', (req, res) => {
+// دریافت پیام‌های یک چت (فقط برای کاربران مجاز)
+app.get('/api/messages/:chatId/:username', (req, res) => {
     try {
-        const { chatId } = req.params;
-        res.json(messages[chatId] || []);
+        const { chatId, username } = req.params;
+        
+        // بررسی دسترسی کاربر به چت
+        const msgs = messages[chatId] || [];
+        
+        // فیلتر پیام‌ها: فقط پیام‌هایی که کاربر در آنها نقش دارد
+        const filteredMsgs = msgs.filter(msg => 
+            msg.from === username || msg.to === username
+        );
+        
+        res.json(filteredMsgs);
     } catch (error) {
         res.status(500).json({ error: 'خطا در دریافت پیام‌ها' });
     }
@@ -262,13 +310,13 @@ app.post('/api/groups/create', (req, res) => {
         writeData(GROUPS_FILE, groups);
         
         // اضافه کردن گروه به اکانت‌های اعضا
-        groups[groupId].members.forEach(username => {
-            if (accounts[username]) {
-                if (!accounts[username].groups) {
-                    accounts[username].groups = [];
+        groups[groupId].members.forEach(member => {
+            if (accounts[member]) {
+                if (!accounts[member].groups) {
+                    accounts[member].groups = [];
                 }
-                if (!accounts[username].groups.includes(groupId)) {
-                    accounts[username].groups.push(groupId);
+                if (!accounts[member].groups.includes(groupId)) {
+                    accounts[member].groups.push(groupId);
                 }
             }
         });
@@ -285,37 +333,91 @@ app.post('/api/groups/create', (req, res) => {
     }
 });
 
-// اضافه کردن عضو به گروه
-app.post('/api/groups/add-member', (req, res) => {
+// ============ مدیریت ویژه (Admin) ============
+
+// دریافت همه کاربران (فقط برای ادمین)
+app.get('/api/admin/users', (req, res) => {
     try {
-        const { groupId, username } = req.body;
-        
-        if (!groups[groupId]) {
-            return res.status(404).json({ error: 'گروه یافت نشد' });
+        const { token } = req.query;
+        if (!token || !sessions[token]) {
+            return res.status(401).json({ error: 'دسترسی غیرمجاز' });
         }
         
-        if (!groups[groupId].members.includes(username)) {
-            groups[groupId].members.push(username);
-            writeData(GROUPS_FILE, groups);
-            
-            if (accounts[username]) {
-                if (!accounts[username].groups) {
-                    accounts[username].groups = [];
-                }
-                if (!accounts[username].groups.includes(groupId)) {
-                    accounts[username].groups.push(groupId);
-                }
-                writeData(ACCOUNTS_FILE, accounts);
+        const session = sessions[token];
+        const account = accounts[session.username];
+        
+        if (!account || !account.isAdmin) {
+            return res.status(403).json({ error: 'دسترسی فقط برای ادمین' });
+        }
+        
+        res.json(accounts);
+    } catch (error) {
+        res.status(500).json({ error: 'خطا در دریافت کاربران' });
+    }
+});
+
+// ویرایش کاربر (فقط برای ادمین)
+app.post('/api/admin/edit-user', async (req, res) => {
+    try {
+        const { token, targetUsername, updates } = req.body;
+        
+        if (!token || !sessions[token]) {
+            return res.status(401).json({ error: 'دسترسی غیرمجاز' });
+        }
+        
+        const session = sessions[token];
+        const account = accounts[session.username];
+        
+        if (!account || !account.isAdmin) {
+            return res.status(403).json({ error: 'دسترسی فقط برای ادمین' });
+        }
+        
+        if (!accounts[targetUsername]) {
+            return res.status(404).json({ error: 'کاربر یافت نشد' });
+        }
+        
+        // اعمال تغییرات
+        Object.keys(updates).forEach(key => {
+            if (key !== 'password' && key !== 'username') {
+                accounts[targetUsername][key] = updates[key];
             }
-        }
-        
-        res.json({ 
-            success: true, 
-            group: groups[groupId] 
         });
         
+        writeData(ACCOUNTS_FILE, accounts);
+        res.json({ success: true, message: 'کاربر به‌روزرسانی شد' });
+        
     } catch (error) {
-        res.status(500).json({ error: 'خطا در اضافه کردن عضو' });
+        res.status(500).json({ error: 'خطا در ویرایش کاربر' });
+    }
+});
+
+// حذف کاربر (فقط برای ادمین)
+app.post('/api/admin/delete-user', (req, res) => {
+    try {
+        const { token, targetUsername } = req.body;
+        
+        if (!token || !sessions[token]) {
+            return res.status(401).json({ error: 'دسترسی غیرمجاز' });
+        }
+        
+        const session = sessions[token];
+        const account = accounts[session.username];
+        
+        if (!account || !account.isAdmin) {
+            return res.status(403).json({ error: 'دسترسی فقط برای ادمین' });
+        }
+        
+        if (targetUsername === 'MALEK') {
+            return res.status(400).json({ error: 'نمی‌توان اکانت ویژه را حذف کرد' });
+        }
+        
+        delete accounts[targetUsername];
+        writeData(ACCOUNTS_FILE, accounts);
+        
+        res.json({ success: true, message: 'کاربر حذف شد' });
+        
+    } catch (error) {
+        res.status(500).json({ error: 'خطا در حذف کاربر' });
     }
 });
 
@@ -350,10 +452,17 @@ io.on('connection', (socket) => {
             accounts[username].lastSeen = new Date().toISOString();
             writeData(ACCOUNTS_FILE, accounts);
             
-            // ارسال اطلاعات کامل
+            // ارسال اطلاعات کامل (فقط پیام‌های مربوط به کاربر)
+            const userMessages = {};
+            Object.keys(messages).forEach(chatId => {
+                userMessages[chatId] = messages[chatId].filter(msg => 
+                    msg.from === username || msg.to === username
+                );
+            });
+            
             socket.emit('authenticated', {
                 user: accounts[username],
-                messages: messages,
+                messages: userMessages,
                 groups: groups,
                 users: accounts
             });
@@ -432,6 +541,7 @@ io.on('connection', (socket) => {
                 if (targetSocketId) {
                     io.to(targetSocketId).emit('newMessage', msg);
                 }
+                // اگر کاربر آفلاین است، پیام در سرور ذخیره شده و بعداً دیده می‌شود
             }
             
             socket.emit('messageSent', { 
@@ -605,11 +715,12 @@ io.on('connection', (socket) => {
 // ============ Server Start ============
 
 server.listen(PORT, () => {
-    console.log('╔════════════════════════════════════════╗');
-    console.log('║   🚀 PYS Messenger v3.0               ║');
-    console.log('║   👤 Designed by S A D R A 🖤💛       ║');
-    console.log('║   📍 Port: ' + PORT + '                         ║');
-    console.log('║   📊 Users: ' + Object.keys(accounts).length + '                         ║');
-    console.log('║   💬 Groups: ' + Object.keys(groups).length + '                         ║');
-    console.log('╚════════════════════════════════════════╝');
+    console.log('╔═══════════════════════════════════════════╗');
+    console.log('║   🚀 PYS Messenger v4.0                 ║');
+    console.log('║   👤 Designed by S A D R A 🖤💛         ║');
+    console.log('║   📍 Port: ' + PORT + '                            ║');
+    console.log('║   📊 Users: ' + Object.keys(accounts).length + '                            ║');
+    console.log('║   💬 Groups: ' + Object.keys(groups).length + '                            ║');
+    console.log('║   👑 Special Account: MALEK             ║');
+    console.log('╚═══════════════════════════════════════════╝');
 });
