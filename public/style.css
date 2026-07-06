@@ -977,3 +977,221 @@ body {
         font-size: 2.5rem;
     }
 }
+
+/* ===== اضافات پنل مدیریت و تیک طلایی ===== */
+
+/* تیک طلایی برای کاربر ویژه */
+.special-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+    color: var(--black);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    border: 2px solid var(--black);
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+}
+
+.chat-item .chat-avatar .special-badge-small {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+    color: var(--black);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    border: 2px solid var(--dark);
+}
+
+/* پنل مدیریت */
+.admin-panel {
+    width: 400px;
+    min-width: 400px;
+    background: var(--dark);
+    border-right: 1px solid rgba(255, 215, 0, 0.1);
+    display: none;
+    flex-direction: column;
+    height: 100vh;
+    animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 15;
+}
+
+.admin-panel.open {
+    display: flex;
+}
+
+.admin-header {
+    display: flex;
+    align-items: center;
+    padding: 20px 20px 15px;
+    border-bottom: 1px solid rgba(255, 215, 0, 0.1);
+    gap: 15px;
+}
+
+.admin-header h3 {
+    color: var(--gold);
+}
+
+.admin-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.admin-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.admin-stat {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 215, 0, 0.05);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-gray);
+}
+
+.admin-stat i {
+    color: var(--gold);
+    font-size: 1.5rem;
+}
+
+.admin-stat strong {
+    color: var(--text);
+}
+
+.admin-users-list h4 {
+    color: var(--gold);
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+}
+
+.admin-user-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    transition: all 0.3s ease;
+}
+
+.admin-user-item:hover {
+    background: rgba(255, 215, 0, 0.03);
+    border-color: rgba(255, 215, 0, 0.1);
+}
+
+.admin-user-item .user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.admin-user-item .user-info .avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    color: var(--black);
+    font-weight: 700;
+}
+
+.admin-user-item .user-info .username {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.admin-user-item .user-info .nickname {
+    color: var(--text-gray);
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+.admin-user-item .user-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.admin-user-item .user-actions button {
+    background: transparent;
+    border: none;
+    color: var(--text-gray);
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    font-size: 0.8rem;
+}
+
+.admin-user-item .user-actions .edit-btn:hover {
+    color: var(--gold);
+    background: rgba(255, 215, 0, 0.1);
+}
+
+.admin-user-item .user-actions .delete-btn:hover {
+    color: #ff4444;
+    background: rgba(255, 0, 0, 0.1);
+}
+
+/* Responsive برای پنل مدیریت */
+@media (max-width: 768px) {
+    .admin-panel {
+        width: 100%;
+        min-width: unset;
+        position: absolute;
+        z-index: 30;
+        height: 100vh;
+    }
+    .admin-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Special glow برای اکانت ویژه */
+.special-glow {
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.1), inset 0 0 40px rgba(255, 215, 0, 0.02);
+}
+
+.special-glow .chat-avatar {
+    background: linear-gradient(135deg, var(--gold), #FF6B00) !important;
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+}
+
+/* نام ویژه در چت */
+.special-name {
+    color: var(--gold) !important;
+    font-weight: 700;
+}
+
+/* تگ ویژه در لیست چت */
+.special-tag {
+    background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+    color: var(--black);
+    font-size: 0.6rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    margin-right: 8px;
+}
