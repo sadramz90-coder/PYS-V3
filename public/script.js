@@ -1,4 +1,8 @@
-// اتصال به سرور با تنظیمات بهتر
+// ============================================
+// PYS Messenger - Client Side
+// Designed by S A D R A 🖤💛
+// ============================================
+
 const socket = io({
     transports: ['websocket', 'polling'],
     reconnection: true,
@@ -6,21 +10,34 @@ const socket = io({
     reconnectionDelay: 1000
 });
 
-// متغیرهای جهانی
+// ===== متغیرهای جهانی =====
 let currentUser = null;
 let currentChat = null;
 let chatHistory = {};
 let allUsers = {};
 let allGroups = {};
 let onlineUsersList = [];
+let authToken = null;
 let isMessageSending = false;
 
-// عناصر DOM
-const loginPage = document.getElementById('loginPage');
+// ===== عناصر DOM =====
+const authPage = document.getElementById('authPage');
 const mainPage = document.getElementById('mainPage');
-const usernameInput = document.getElementById('usernameInput');
-const nicknameInput = document.getElementById('nicknameInput');
+
+// Auth elements
+const loginUsername = document.getElementById('loginUsername');
+const loginPassword = document.getElementById('loginPassword');
 const loginBtn = document.getElementById('loginBtn');
+const registerUsername = document.getElementById('registerUsername');
+const registerNickname = document.getElementById('registerNickname');
+const registerPassword = document.getElementById('registerPassword');
+const registerConfirmPassword = document.getElementById('registerConfirmPassword');
+const registerBtn = document.getElementById('registerBtn');
+const authTabs = document.querySelectorAll('.auth-tab');
+const loginForm = document.getElementById('loginForm');
+const registerForm = document.getElementById('registerForm');
+
+// Main elements
 const chatList = document.getElementById('chatList');
 const messagesContainer = document.getElementById('messages');
 const messageInput = document.getElementById('messageInput');
@@ -33,34 +50,21 @@ const closeProfile = document.getElementById('closeProfile');
 const profileName = document.getElementById('profileName');
 const profileUsername = document.getElementById('profileUsername');
 const profileBio = document.getElementById('profileBio');
+const profileNickname = document.getElementById('profileNickname');
 const editBioBtn = document.getElementById('editBioBtn');
+const editNicknameBtn = document.getElementById('editNicknameBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const searchChat = document.getElementById('searchChat');
 const settingsBtn = document.getElementById('settingsBtn');
 const newChatBtn = document.getElementById('newChatBtn');
+const newGroupBtn = document.getElementById('newGroupBtn');
 
-// تابع نمایش اعلان
+// ===== توابع کمکی =====
+
 function showNotification(message, type = 'info') {
     const notif = document.createElement('div');
     notif.className = `notification ${type}`;
     notif.textContent = message;
-    notif.style.cssText = `
-        position: fixed;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: ${type === 'error' ? '#ff4444' : '#1a1a1a'};
-        border: 1px solid ${type === 'error' ? '#ff4444' : 'rgba(255,215,0,0.2)'};
-        border-radius: 15px;
-        padding: 15px 30px;
-        color: white;
-        z-index: 10000;
-        font-family: 'Vazirmatn', sans-serif;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-        animation: slideUp 0.3s ease;
-        max-width: 90%;
-        text-align: center;
-    `;
     document.body.appendChild(notif);
     setTimeout(() => {
         notif.style.opacity = '0';
@@ -69,13 +73,51 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-// تابع ورود
-loginBtn.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    const nickname = nicknameInput.value.trim();
+function saveToken(token) {
+    authToken = token;
+    localStorage.setItem('pys_token', token);
+}
+
+function getToken() {
+    if (!authToken) {
+        authToken = localStorage.getItem('pys_token');
+    }
+    return authToken;
+}
+
+function clearToken() {
+    authToken = null;
+    localStorage.removeItem('pys_token');
+}
+
+// ===== مدیریت تب‌های احراز هویت =====
+
+authTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+        authTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        const tabName = tab.dataset.tab;
+        if (tabName === 'login') {
+            loginForm.style.display = 'flex';
+            registerForm.style.display = 'none';
+        } else {
+            loginForm.style.display = 'none';
+            registerForm.style.display = 'flex';
+        }
+    });
+});
+
+// ===== ثبت نام =====
+
+registerBtn.addEventListener('click', async () => {
+    const username = registerUsername.value.trim();
+    const nickname = registerNickname.value.trim();
+    const password = registerPassword.value;
+    const confirmPassword = registerConfirmPassword.value;
     
-    if (!username) {
-        showNotification('لطفاً نام کاربری را وارد کنید!', 'error');
+    if (!username || !password) {
+        showNotification('لطفاً تمام فیلدهای ضروری را پر کنید!', 'error');
         return;
     }
     
@@ -84,67 +126,150 @@ loginBtn.addEventListener('click', () => {
         return;
     }
     
-    loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال اتصال...';
-    loginBtn.disabled = true;
+    if (password.length < 4) {
+        showNotification('رمز عبور باید حداقل 4 کاراکتر باشد!', 'error');
+        return;
+    }
     
-    socket.emit('register', { username, nickname });
+    if (password !== confirmPassword) {
+        showNotification('رمز عبور و تکرار آن مطابقت ندارند!', 'error');
+        return;
+    }
+    
+    registerBtn.disabled = true;
+    registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ثبت نام...';
+    
+    try {
+        const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, nickname })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('✅ ثبت نام با موفقیت انجام شد! حالا وارد شوید.');
+            // تغییر به تب ورود
+            authTabs.forEach(t => t.classList.remove('active'));
+            document.querySelector('[data-tab="login"]').classList.add('active');
+            loginForm.style.display = 'flex';
+            registerForm.style.display = 'none';
+            loginUsername.value = username;
+            loginPassword.value = '';
+        } else {
+            showNotification(data.error || 'خطا در ثبت نام!', 'error');
+        }
+    } catch (error) {
+        showNotification('خطا در ارتباط با سرور!', 'error');
+    }
+    
+    registerBtn.disabled = false;
+    registerBtn.innerHTML = '<i class="fas fa-user-plus"></i> ثبت نام در PYS';
 });
 
-// Enter برای لاگین
-usernameInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') loginBtn.click();
-});
-nicknameInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') loginBtn.click();
+// ===== ورود =====
+
+loginBtn.addEventListener('click', async () => {
+    const username = loginUsername.value.trim();
+    const password = loginPassword.value;
+    
+    if (!username || !password) {
+        showNotification('لطفاً نام کاربری و رمز عبور را وارد کنید!', 'error');
+        return;
+    }
+    
+    loginBtn.disabled = true;
+    loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ورود...';
+    
+    try {
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            saveToken(data.token);
+            currentUser = data.user;
+            showNotification(`✅ خوش آمدید ${currentUser.nickname}!`);
+            
+            // اتصال به Socket.IO با توکن
+            socket.emit('authenticate', { token: data.token });
+        } else {
+            showNotification(data.error || 'خطا در ورود!', 'error');
+            loginBtn.disabled = false;
+            loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به PYS';
+        }
+    } catch (error) {
+        showNotification('خطا در ارتباط با سرور!', 'error');
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به PYS';
+    }
 });
 
-// دریافت اطلاعات پس از ثبت نام
-socket.on('userRegistered', (data) => {
+// Enter key for login/register
+loginPassword.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') loginBtn.click();
+});
+registerConfirmPassword.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') registerBtn.click();
+});
+
+// ===== Socket.IO Events =====
+
+socket.on('authenticated', (data) => {
     currentUser = data.user;
     allUsers = data.users;
     allGroups = data.groups;
-    chatHistory = data.messages;
+    chatHistory = data.messages || {};
     
-    loginPage.classList.remove('active');
+    authPage.classList.remove('active');
     mainPage.classList.add('active');
     
     updateChatList();
     updateProfile();
-    showNotification(`به PYS خوش آمدید ${currentUser.nickname || currentUser.username}! 🖤💛`);
+    showNotification(`به PYS خوش آمدید ${currentUser.nickname}! 🖤💛`);
     
-    loginBtn.innerHTML = '<i class="fas fa-rocket"></i> ورود به PYS';
     loginBtn.disabled = false;
-    
-    console.log('✅ کاربر ثبت شد:', currentUser.username);
+    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به PYS';
 });
 
-// خطاها
+socket.on('authError', (data) => {
+    showNotification(data.message || 'خطا در احراز هویت!', 'error');
+    clearToken();
+    loginBtn.disabled = false;
+    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به PYS';
+});
+
 socket.on('error', (data) => {
     showNotification(data.message || 'خطایی رخ داد!', 'error');
-    loginBtn.innerHTML = '<i class="fas fa-rocket"></i> ورود به PYS';
-    loginBtn.disabled = false;
 });
 
-// به‌روزرسانی لیست چت‌ها
+// ===== مدیریت چت‌ها =====
+
 function updateChatList() {
     chatList.innerHTML = '';
     
     if (!currentUser) return;
     
+    // چت‌های خصوصی
     const contacts = Object.keys(allUsers).filter(u => u !== currentUser.username);
     
-    if (contacts.length === 0) {
-        const emptyDiv = document.createElement('div');
-        emptyDiv.style.cssText = 'text-align:center;padding:40px 20px;color:var(--text-gray);opacity:0.5;';
-        emptyDiv.innerHTML = `
-            <i class="fas fa-users" style="font-size:3rem;display:block;margin-bottom:15px;"></i>
-            <p>هنوز کاربری برای چت وجود ندارد</p>
-            <span style="font-size:0.9rem;">از دکمه + برای شروع چت استفاده کنید</span>
+    if (contacts.length === 0 && Object.keys(allGroups).length === 0) {
+        chatList.innerHTML = `
+            <div style="text-align:center;padding:40px 20px;color:var(--text-gray);opacity:0.5;">
+                <i class="fas fa-users" style="font-size:3rem;display:block;margin-bottom:15px;"></i>
+                <p>هنوز چتی وجود ندارد</p>
+                <span style="font-size:0.9rem;">از دکمه + یا گروه برای شروع استفاده کنید</span>
+            </div>
         `;
-        chatList.appendChild(emptyDiv);
         return;
     }
     
+    // چت‌های خصوصی
     contacts.forEach(username => {
         const user = allUsers[username];
         const chatId = username;
@@ -171,20 +296,43 @@ function updateChatList() {
             <div class="chat-time">${lastMsg ? new Date(lastMsg.timestamp).toLocaleTimeString('fa-IR', {hour: '2-digit', minute: '2-digit'}) : ''}</div>
         `;
         
-        chatItem.addEventListener('click', () => {
-            openChat(chatId, 'private');
-        });
-        
+        chatItem.addEventListener('click', () => openChat(chatId, 'private'));
         chatList.appendChild(chatItem);
+    });
+    
+    // چت‌های گروهی
+    Object.keys(allGroups).forEach(groupId => {
+        const group = allGroups[groupId];
+        if (group.members && group.members.includes(currentUser.username)) {
+            const chatItem = document.createElement('div');
+            chatItem.className = `chat-item ${currentChat === groupId ? 'active' : ''}`;
+            chatItem.dataset.chatId = groupId;
+            chatItem.dataset.type = 'group';
+            
+            const msgs = chatHistory[groupId] || [];
+            const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+            
+            chatItem.innerHTML = `
+                <div class="chat-avatar">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div class="chat-info">
+                    <div class="chat-name">${group.name}</div>
+                    <div class="chat-last-msg">${lastMsg ? lastMsg.message : 'گروه خالی'}</div>
+                </div>
+            `;
+            
+            chatItem.addEventListener('click', () => openChat(groupId, 'group'));
+            chatList.appendChild(chatItem);
+        }
     });
 }
 
-// باز کردن چت
 function openChat(chatId, type) {
     if (!chatId) return;
     
     currentChat = chatId;
-    console.log('📂 باز کردن چت:', chatId, 'نوع:', type);
+    console.log('📂 باز کردن چت:', chatId);
     
     document.querySelectorAll('.chat-item').forEach(el => {
         el.classList.toggle('active', el.dataset.chatId === chatId);
@@ -220,7 +368,6 @@ function openChat(chatId, type) {
     messageInput.focus();
 }
 
-// *** بارگذاری پیام‌ها - نسخه اصلاح شده ***
 function loadMessages(chatId) {
     messagesContainer.innerHTML = '';
     
@@ -237,23 +384,15 @@ function loadMessages(chatId) {
         return;
     }
     
-    // نمایش همه پیام‌ها
-    msgs.forEach(msg => {
-        appendMessage(msg);
-    });
-    
+    msgs.forEach(msg => appendMessage(msg));
     scrollToBottom();
 }
 
-// *** افزودن پیام به صفحه - بدون بازسازی کامل ***
 function appendMessage(msg) {
     if (!msg) return;
     
-    // بررسی اینکه آیا پیام قبلاً اضافه شده یا نه
     const existingMsg = document.querySelector(`[data-msg-id="${msg.id}"]`);
-    if (existingMsg) {
-        return; // پیام قبلاً وجود دارد
-    }
+    if (existingMsg) return;
     
     const isSent = msg.from === currentUser.username;
     const msgDiv = document.createElement('div');
@@ -271,9 +410,7 @@ function appendMessage(msg) {
                 content += `<div class="msg-reply">${repliedMsg.message}</div>`;
             }
         }
-        
         content += `<div class="msg-text">${msg.message}</div>`;
-        
         if (msg.edited) {
             content += `<span class="msg-edited">✏️ ویرایش شده</span>`;
         }
@@ -288,7 +425,6 @@ function appendMessage(msg) {
     
     msgDiv.innerHTML = content;
     
-    // منوی کلیک راست برای پیام‌های خود
     if (isSent && !msg.deleted) {
         msgDiv.addEventListener('contextmenu', (e) => {
             e.preventDefault();
@@ -296,32 +432,17 @@ function appendMessage(msg) {
         });
     }
     
-    // حذف پیام خالی (اگر وجود داشته باشد)
     const emptyState = messagesContainer.querySelector('.empty-state');
-    if (emptyState) {
-        emptyState.remove();
-    }
+    if (emptyState) emptyState.remove();
     
     messagesContainer.appendChild(msgDiv);
 }
 
-// منوی پیام
 function showMessageMenu(msgId, chatId) {
     document.querySelector('.message-menu')?.remove();
     
     const menu = document.createElement('div');
     menu.className = 'message-menu';
-    menu.style.cssText = `
-        position: fixed;
-        background: #1a1a1a;
-        border: 1px solid rgba(255,215,0,0.2);
-        border-radius: 12px;
-        padding: 8px;
-        z-index: 9999;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.8);
-        min-width: 150px;
-    `;
-    
     menu.innerHTML = `
         <button onclick="editMessage('${msgId}','${chatId}')" style="background:transparent;border:none;color:var(--gold);padding:10px 20px;cursor:pointer;display:flex;align-items:center;gap:10px;width:100%;text-align:right;font-family:'Vazirmatn',sans-serif;border-radius:8px;transition:all 0.2s;">
             <i class="fas fa-edit"></i> ویرایش
@@ -337,24 +458,17 @@ function showMessageMenu(msgId, chatId) {
     let x = event.clientX;
     let y = event.clientY;
     
-    if (x + rect.width > window.innerWidth) {
-        x = x - rect.width;
-    }
-    if (y + rect.height > window.innerHeight) {
-        y = y - rect.height;
-    }
+    if (x + rect.width > window.innerWidth) x = x - rect.width;
+    if (y + rect.height > window.innerHeight) y = y - rect.height;
     
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
     
     setTimeout(() => {
-        document.addEventListener('click', () => {
-            menu.remove();
-        }, { once: true });
+        document.addEventListener('click', () => menu.remove(), { once: true });
     }, 100);
 }
 
-// ویرایش پیام
 window.editMessage = function(msgId, chatId) {
     const newText = prompt('متن جدید:', '');
     if (newText !== null && newText.trim()) {
@@ -363,7 +477,6 @@ window.editMessage = function(msgId, chatId) {
     document.querySelector('.message-menu')?.remove();
 };
 
-// حذف پیام
 window.deleteMessage = function(msgId, chatId) {
     if (confirm('🗑️ آیا از حذف این پیام مطمئن هستید؟')) {
         socket.emit('deleteMessage', { chatId, messageId: msgId });
@@ -371,17 +484,15 @@ window.deleteMessage = function(msgId, chatId) {
     document.querySelector('.message-menu')?.remove();
 };
 
-// اسکرول به پایین
 function scrollToBottom() {
     const container = document.querySelector('.messages-container');
     if (container) {
-        setTimeout(() => {
-            container.scrollTop = container.scrollHeight;
-        }, 100);
+        setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
     }
 }
 
-// *** ارسال پیام - اصلاح شده ***
+// ===== ارسال پیام =====
+
 function sendMessage() {
     const text = messageInput.value.trim();
     
@@ -395,12 +506,8 @@ function sendMessage() {
         return;
     }
     
-    if (isMessageSending) {
-        return;
-    }
-    
+    if (isMessageSending) return;
     isMessageSending = true;
-    console.log('📤 ارسال پیام به:', currentChat, 'متن:', text.substring(0, 20));
     
     socket.emit('sendMessage', {
         chatId: currentChat,
@@ -412,85 +519,58 @@ function sendMessage() {
     messageInput.value = '';
     messageInput.focus();
     
-    setTimeout(() => {
-        isMessageSending = false;
-    }, 500);
+    setTimeout(() => { isMessageSending = false; }, 500);
 }
 
-// *** رویداد اصلی دریافت پیام - نسخه نهایی ***
+sendBtn.addEventListener('click', sendMessage);
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+// ===== Socket Events =====
+
 socket.on('newMessage', (msg) => {
-    console.log('📨 پیام جدید دریافت شد از:', msg.from, 'به:', msg.to, 'متن:', msg.message.substring(0, 20));
-    
-    // تعیین چت آیدی صحیح
     let chatId = msg.to;
     
-    // اگر پیام از طرف کاربر جاری است، چت آیدی همان msg.to است
-    // اگر پیام برای کاربر جاری است، چت آیدی همون msg.from است
     if (msg.to === currentUser.username) {
         chatId = msg.from;
     } else if (msg.from === currentUser.username) {
         chatId = msg.to;
     } else {
-        // پیام برای کاربر دیگری است
-        console.log('⏭️ پیام برای کاربر دیگر است');
         return;
     }
     
-    // ذخیره در تاریخچه با آیدی صحیح
     if (!chatHistory[chatId]) {
         chatHistory[chatId] = [];
     }
     
-    // بررسی تکراری نبودن
     const exists = chatHistory[chatId].some(m => m.id === msg.id);
     if (!exists) {
         chatHistory[chatId].push(msg);
-        console.log(`✅ پیام به تاریخچه ${chatId} اضافه شد. تعداد کل: ${chatHistory[chatId].length}`);
         
-        // اگر چت باز است، پیام را نمایش بده
         if (currentChat === chatId) {
             appendMessage(msg);
             scrollToBottom();
         }
         
-        // به‌روزرسانی لیست چت‌ها
         updateChatList();
         
-        // اعلان برای پیام‌های دریافتی
         if (msg.from !== currentUser.username) {
             const sender = allUsers[msg.from]?.nickname || msg.from;
             showNotification(`📩 پیام جدید از ${sender}`);
-            
-            // پخش صدا
-            try {
-                const audio = new Audio('data:audio/wav;base64,UklGRnoAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoAAACBhYqFhYWQhZKFhYaFhZGFkYWNhZGFkYWRhZGFkYWShZKFj4WPhY+Fj4WNhZGFkYWRhZGFjoWPhZCFkIWRhZCFj4WPhY2FkoWShZKFjYWPhZCFkIWRhY6FkoWShZKFjYWRhZGFkIWRhZCFj4WQhZCFjYWRhZGFj4WPhZCFkIWRhZCFj4WNhZGFkIWRhZCFj4WRhZCFkIWRhZCFj4WQhZCFj4WP');
-                audio.volume = 0.3;
-                audio.play().catch(() => {});
-            } catch(e) {}
         }
     }
 });
 
-// تأیید ارسال پیام
 socket.on('messageSent', (data) => {
     if (data.success) {
-        console.log('✅ پیام با موفقیت ارسال شد:', data.messageId);
+        console.log('✅ پیام ارسال شد:', data.messageId);
     }
 });
 
-// تاریخچه چت
-socket.on('chatHistory', (data) => {
-    const { chatId, messages: msgs } = data;
-    if (!chatHistory[chatId]) {
-        chatHistory[chatId] = [];
-    }
-    chatHistory[chatId] = msgs;
-    if (currentChat === chatId) {
-        loadMessages(chatId);
-    }
-});
-
-// ویرایش پیام
 socket.on('messageEdited', (data) => {
     const { chatId, messageId, newText } = data;
     if (chatHistory[chatId]) {
@@ -498,28 +578,16 @@ socket.on('messageEdited', (data) => {
         if (msg) {
             msg.message = newText;
             msg.edited = true;
-            // به‌روزرسانی نمایش
             const msgElement = document.querySelector(`[data-msg-id="${messageId}"]`);
             if (msgElement) {
                 const textDiv = msgElement.querySelector('.msg-text');
-                if (textDiv) {
-                    textDiv.textContent = newText;
-                }
-                // اضافه کردن برچسب ویرایش شده
-                let editedSpan = msgElement.querySelector('.msg-edited');
-                if (!editedSpan) {
-                    editedSpan = document.createElement('span');
-                    editedSpan.className = 'msg-edited';
-                    editedSpan.textContent = '✏️ ویرایش شده';
-                    msgElement.querySelector('.msg-time').before(editedSpan);
-                }
+                if (textDiv) textDiv.textContent = newText;
             }
             showNotification('✏️ پیام ویرایش شد');
         }
     }
 });
 
-// حذف پیام
 socket.on('messageDeleted', (data) => {
     const { chatId, messageId } = data;
     if (chatHistory[chatId]) {
@@ -527,7 +595,6 @@ socket.on('messageDeleted', (data) => {
         if (msg) {
             msg.deleted = true;
             msg.message = 'این پیام حذف شده است';
-            // به‌روزرسانی نمایش
             const msgElement = document.querySelector(`[data-msg-id="${messageId}"]`);
             if (msgElement) {
                 const textDiv = msgElement.querySelector('.msg-text');
@@ -542,7 +609,6 @@ socket.on('messageDeleted', (data) => {
     }
 });
 
-// وضعیت آنلاین
 socket.on('userOnline', (data) => {
     if (!onlineUsersList.includes(data.username)) {
         onlineUsersList.push(data.username);
@@ -552,7 +618,6 @@ socket.on('userOnline', (data) => {
         chatStatus.textContent = '🟢 آنلاین';
         chatStatus.className = 'chat-status online';
     }
-    console.log('🟢 کاربر آنلاین شد:', data.username);
 });
 
 socket.on('userOffline', (data) => {
@@ -563,30 +628,51 @@ socket.on('userOffline', (data) => {
         chatStatus.textContent = `⚫ آخرین بازدید: ${time}`;
         chatStatus.className = 'chat-status';
     }
-    console.log('🔴 کاربر آفلاین شد:', data.username);
 });
 
 socket.on('onlineList', (list) => {
     onlineUsersList = list;
     updateChatList();
-    console.log('👥 لیست آنلاین‌ها:', list);
 });
 
-// آپدیت پروفایل
+socket.on('userTyping', (data) => {
+    if (currentChat && data.username !== currentUser.username) {
+        if (data.isTyping) {
+            chatStatus.textContent = '✏️ در حال تایپ...';
+            chatStatus.className = 'chat-status';
+        } else {
+            const isOnline = onlineUsersList.includes(data.username);
+            chatStatus.textContent = isOnline ? '🟢 آنلاین' : '⚫ آفلاین';
+            chatStatus.className = `chat-status ${isOnline ? 'online' : ''}`;
+        }
+    }
+});
+
+// ===== پروفایل =====
+
 function updateProfile() {
     if (!currentUser) return;
     profileName.textContent = currentUser.nickname || currentUser.username;
+    profileNickname.textContent = currentUser.nickname || currentUser.username;
     profileUsername.textContent = `@${currentUser.username}`;
     profileBio.textContent = currentUser.bio || 'بیوگرافی خود را وارد کنید';
     document.getElementById('memberSince').textContent = new Date(currentUser.createdAt).toLocaleDateString('fa-IR');
     document.getElementById('lastSeen').textContent = currentUser.status === 'online' ? 'همین الان' : new Date(currentUser.lastSeen).toLocaleString('fa-IR');
 }
 
-// ویرایش بیو
 editBioBtn.addEventListener('click', () => {
     const newBio = prompt('بیوگرافی جدید:', currentUser.bio);
     if (newBio !== null && newBio.trim()) {
         socket.emit('updateBio', { bio: newBio.trim() });
+        showNotification('📝 در حال به‌روزرسانی بیو...');
+    }
+});
+
+editNicknameBtn.addEventListener('click', () => {
+    const newNickname = prompt('نام نمایشی جدید:', currentUser.nickname);
+    if (newNickname !== null && newNickname.trim()) {
+        socket.emit('updateNickname', { nickname: newNickname.trim() });
+        showNotification('📝 در حال به‌روزرسانی نام...');
     }
 });
 
@@ -596,17 +682,35 @@ socket.on('bioUpdated', (data) => {
     showNotification('✅ بیوگرافی به‌روزرسانی شد! ✨');
 });
 
-// خروج
+socket.on('nicknameUpdated', (data) => {
+    currentUser.nickname = data.nickname;
+    profileName.textContent = data.nickname;
+    profileNickname.textContent = data.nickname;
+    updateChatList();
+    showNotification('✅ نام نمایشی به‌روزرسانی شد! ✨');
+});
+
+socket.on('userUpdated', (data) => {
+    if (data.username === currentUser.username) {
+        updateProfile();
+        updateChatList();
+    }
+});
+
+// ===== خروج =====
+
 logoutBtn.addEventListener('click', () => {
     if (confirm('آیا از خروج مطمئن هستید؟')) {
-        socket.emit('updateStatus', { status: 'offline' });
+        socket.emit('logout');
+        clearToken();
         setTimeout(() => {
             location.reload();
         }, 500);
     }
 });
 
-// باز کردن پروفایل
+// ===== تنظیمات و پروفایل =====
+
 settingsBtn.addEventListener('click', () => {
     profileSidebar.classList.toggle('open');
     updateProfile();
@@ -616,7 +720,8 @@ closeProfile.addEventListener('click', () => {
     profileSidebar.classList.remove('open');
 });
 
-// جستجو
+// ===== جستجو =====
+
 searchChat.addEventListener('input', (e) => {
     const query = e.target.value.toLowerCase().trim();
     document.querySelectorAll('.chat-item').forEach(item => {
@@ -625,7 +730,8 @@ searchChat.addEventListener('input', (e) => {
     });
 });
 
-// چت جدید
+// ===== چت جدید =====
+
 newChatBtn.addEventListener('click', () => {
     const username = prompt('👤 نام کاربری مخاطب:');
     if (username && username.trim()) {
@@ -643,27 +749,83 @@ newChatBtn.addEventListener('click', () => {
     }
 });
 
-// تایپینگ
+// ===== گروه جدید =====
+
+newGroupBtn.addEventListener('click', async () => {
+    const groupName = prompt('📝 نام گروه:');
+    if (!groupName || !groupName.trim()) return;
+    
+    const membersInput = prompt('👥 نام کاربران (با کاما جدا کنید):');
+    const members = membersInput ? membersInput.split(',').map(m => m.trim()).filter(m => m) : [];
+    
+    // اضافه کردن خود کاربر
+    if (!members.includes(currentUser.username)) {
+        members.unshift(currentUser.username);
+    }
+    
+    try {
+        const response = await fetch('/api/groups/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: groupName.trim(),
+                creator: currentUser.username,
+                members: members
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            allGroups[data.group.id] = data.group;
+            updateChatList();
+            openChat(data.group.id, 'group');
+            showNotification(`✅ گروه ${data.group.name} ایجاد شد!`);
+        } else {
+            showNotification(data.error || 'خطا در ایجاد گروه!', 'error');
+        }
+    } catch (error) {
+        showNotification('خطا در ارتباط با سرور!', 'error');
+    }
+});
+
+// ===== تایپینگ =====
+
 messageInput.addEventListener('input', () => {
     if (currentChat) {
         socket.emit('typing', { chatId: currentChat });
     }
 });
 
-socket.on('userTyping', (data) => {
-    if (currentChat && data.username !== currentUser.username) {
-        if (data.isTyping) {
-            chatStatus.textContent = '✏️ در حال تایپ...';
-            chatStatus.className = 'chat-status';
-        } else {
-            const isOnline = onlineUsersList.includes(data.username);
-            chatStatus.textContent = isOnline ? '🟢 آنلاین' : '⚫ آفلاین';
-            chatStatus.className = `chat-status ${isOnline ? 'online' : ''}`;
-        }
-    }
-});
+// ===== بارگذاری خودکار با توکن =====
 
-// اضافه کردن استایل
+async function autoLogin() {
+    const token = getToken();
+    if (!token) return;
+    
+    try {
+        const response = await fetch('/api/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            currentUser = data.user;
+            socket.emit('authenticate', { token });
+            showNotification(`🔄 خوش آمدید ${currentUser.nickname}!`);
+        } else {
+            clearToken();
+        }
+    } catch (error) {
+        clearToken();
+    }
+}
+
+// ===== استایل‌های اضافی =====
+
 const style = document.createElement('style');
 style.textContent = `
     .message-menu button:hover {
@@ -673,47 +835,32 @@ style.textContent = `
         animation: slideUp 0.3s ease !important;
     }
     @keyframes slideUp {
-        from {
-            opacity: 0;
-            transform: translateX(-50%) translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
+        from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+        to { opacity: 1; transform: translateX(-50%) translateY(0); }
     }
 `;
 document.head.appendChild(style);
 
-// لاگ
+// ===== شروع =====
+
 console.log('🖤💛 PYS Messenger v3.0 - Final Version');
-console.log('👤 طراحی شده توسط S A D R A');
-console.log('📡 اتصال به سرور...');
+console.log('👤 Designed by S A D R A');
 
 socket.on('connect', () => {
-    console.log('✅ اتصال به سرور برقرار شد!');
+    console.log('✅ Connected to server');
+    autoLogin();
 });
 
 socket.on('disconnect', () => {
-    console.log('❌ اتصال به سرور قطع شد!');
+    console.log('❌ Disconnected from server');
     showNotification('⚠️ اتصال به سرور قطع شد!', 'error');
 });
 
-// رویدادهای دکمه‌ها
-sendBtn.addEventListener('click', sendMessage);
-messageInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
-});
-
-// تابع برای رفرش دستی پیام‌ها (در صورت نیاز)
-window.refreshMessages = function() {
+// ===== اضافه کردن تابع رفرش =====
+window.refreshChat = function() {
     if (currentChat) {
         loadMessages(currentChat);
         showNotification('🔄 پیام‌ها به‌روزرسانی شدند');
     }
 };
-
-console.log('💡 برای رفرش دستی پیام‌ها: refreshMessages()');
+console.log('💡 برای رفرش پیام‌ها: refreshChat()');
