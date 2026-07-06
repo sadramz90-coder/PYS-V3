@@ -88,6 +88,9 @@
                         <button id="newGroupBtn" class="icon-btn" title="گروه جدید">
                             <i class="fas fa-users"></i>
                         </button>
+                        <button id="adminPanelBtn" class="icon-btn" title="پنل مدیریت" style="display:none;">
+                            <i class="fas fa-crown" style="color:var(--gold);"></i>
+                        </button>
                         <button id="settingsBtn" class="icon-btn" title="پروفایل">
                             <i class="fas fa-user-circle"></i>
                         </button>
@@ -146,6 +149,33 @@
                 </div>
             </div>
             
+            <!-- پنل مدیریت (فقط برای ادمین) -->
+            <div class="admin-panel" id="adminPanel" style="display:none;">
+                <div class="admin-header">
+                    <button class="icon-btn close-admin" id="closeAdmin">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <h3><i class="fas fa-crown" style="color:var(--gold);"></i> پنل مدیریت</h3>
+                </div>
+                <div class="admin-content">
+                    <div class="admin-stats">
+                        <div class="admin-stat">
+                            <i class="fas fa-users"></i>
+                            <span>کاربران: <strong id="totalUsers">0</strong></span>
+                        </div>
+                        <div class="admin-stat">
+                            <i class="fas fa-comments"></i>
+                            <span>گروه‌ها: <strong id="totalGroups">0</strong></span>
+                        </div>
+                    </div>
+                    
+                    <div class="admin-users-list" id="adminUsersList">
+                        <h4>لیست کاربران</h4>
+                        <div id="usersListContainer"></div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- پروفایل سایدبار -->
             <div class="profile-sidebar" id="profileSidebar">
                 <div class="profile-header">
@@ -158,6 +188,9 @@
                     <div class="profile-avatar" id="profileAvatar">
                         <i class="fas fa-user-circle"></i>
                         <div class="profile-status" id="profileStatus"></div>
+                        <div class="special-badge" id="specialBadge" style="display:none;">
+                            <i class="fas fa-crown"></i>
+                        </div>
                     </div>
                     <div class="profile-name" id="profileName">نام کاربر</div>
                     <div class="profile-username" id="profileUsername">@username</div>
