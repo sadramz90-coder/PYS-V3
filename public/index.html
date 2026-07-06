@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PYS - پیام‌رسان طلایی 🖤💛</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+    <!-- صفحه لاگین -->
+    <div id="loginPage" class="page active">
+        <div class="login-container">
+            <div class="login-header">
+                <div class="logo">
+                    <i class="fas fa-crown"></i>
+                    <span>PYS</span>
+                </div>
+                <div class="subtitle">پیام‌رسان طلایی</div>
+            </div>
+            <div class="login-form">
+                <div class="input-group">
+                    <i class="fas fa-user"></i>
+                    <input type="text" id="usernameInput" placeholder="نام کاربری" maxlength="20">
+                </div>
+                <div class="input-group">
+                    <i class="fas fa-user-tag"></i>
+                    <input type="text" id="nicknameInput" placeholder="نام نمایشی (اختیاری)" maxlength="30">
+                </div>
+                <button id="loginBtn" class="golden-btn">
+                    <i class="fas fa-rocket"></i>
+                    ورود به PYS
+                </button>
+                <div class="login-footer">
+                    <span>طراحی شده با 🖤 توسط <strong>S A D R A</strong></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- صفحه اصلی پیام‌رسان -->
+    <div id="mainPage" class="page">
+        <div class="app-container">
+            <!-- سایدبار چپ - لیست چت‌ها -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <div class="sidebar-logo">
+                        <i class="fas fa-crown"></i>
+                        <span>PYS</span>
+                    </div>
+                    <div class="sidebar-actions">
+                        <button id="newChatBtn" class="icon-btn" title="چت جدید">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button id="settingsBtn" class="icon-btn" title="تنظیمات">
+                            <i class="fas fa-cog"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- جستجو -->
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchChat" placeholder="جستجوی چت‌ها...">
+                </div>
+                
+                <!-- لیست چت‌ها -->
+                <div class="chat-list" id="chatList">
+                    <!-- چت‌ها به صورت داینامیک ساخته می‌شوند -->
+                </div>
+            </div>
+            
+            <!-- منطقه اصلی چت -->
+            <div class="chat-area" id="chatArea">
+                <!-- هدر چت -->
+                <div class="chat-header" id="chatHeader">
+                    <div class="chat-user-info">
+                        <div class="chat-avatar" id="chatAvatar">
+                            <i class="fas fa-user-circle"></i>
+                        </div>
+                        <div class="chat-user-details">
+                            <div class="chat-username" id="chatUsername">انتخاب چت</div>
+                            <div class="chat-status" id="chatStatus">آفلاین</div>
+                        </div>
+                    </div>
+                    <div class="chat-actions">
+                        <button id="callBtn" class="icon-btn" title="تماس صوتی">
+                            <i class="fas fa-phone"></i>
+                        </button>
+                        <button id="videoCallBtn" class="icon-btn" title="تماس تصویری">
+                            <i class="fas fa-video"></i>
+                        </button>
+                        <button id="groupInfoBtn" class="icon-btn" title="اطلاعات گروه">
+                            <i class="fas fa-info-circle"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- منطقه پیام‌ها -->
+                <div class="messages-container" id="messagesContainer">
+                    <div class="messages" id="messages">
+                        <!-- پیام‌ها به صورت داینامیک ساخته می‌شوند -->
+                        <div class="empty-state">
+                            <i class="fas fa-comments"></i>
+                            <p>هیچ پیامی وجود ندارد</p>
+                            <span>اولین پیام را ارسال کنید</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ناحیه تایپ پیام -->
+                <div class="message-input-area">
+                    <div class="input-actions">
+                        <button class="icon-btn" id="emojiBtn">
+                            <i class="fas fa-smile"></i>
+                        </button>
+                        <button class="icon-btn" id="attachBtn">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
+                    </div>
+                    <div class="input-wrapper">
+                        <input type="text" id="messageInput" placeholder="پیام خود را بنویسید..." maxlength="1000">
+                    </div>
+                    <button id="sendBtn" class="send-btn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- پروفایل سایدبار راست -->
+            <div class="profile-sidebar" id="profileSidebar">
+                <div class="profile-header">
+                    <button class="icon-btn close-profile" id="closeProfile">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <h3>پروفایل</h3>
+                </div>
+                <div class="profile-content">
+                    <div class="profile-avatar">
+                        <img src="" alt="پروفایل" id="profileAvatar">
+                        <div class="profile-status" id="profileStatus"></div>
+                    </div>
+                    <div class="profile-name" id="profileName">نام کاربر</div>
+                    <div class="profile-username" id="profileUsername">@username</div>
+                    <div class="profile-bio-section">
+                        <h4>بیوگرافی</h4>
+                        <p id="profileBio">بیوگرافی خود را وارد کنید</p>
+                        <button class="edit-bio-btn" id="editBioBtn">
+                            <i class="fas fa-edit"></i> ویرایش بیو
+                        </button>
+                    </div>
+                    <div class="profile-stats">
+                        <div class="stat-item">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span>عضو از: <span id="memberSince">امروز</span></span>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-clock"></i>
+                            <span>آخرین بازدید: <span id="lastSeen">همین الان</span></span>
+                        </div>
+                    </div>
+                    <div class="profile-actions">
+                        <button class="profile-btn" id="logoutBtn">
+                            <i class="fas fa-sign-out-alt"></i> خروج
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
