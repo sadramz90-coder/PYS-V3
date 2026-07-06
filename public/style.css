@@ -28,37 +28,31 @@ body {
     direction: rtl;
 }
 
-/* اسکرول بار سفارشی */
 ::-webkit-scrollbar {
     width: 6px;
 }
-
 ::-webkit-scrollbar-track {
     background: var(--dark);
 }
-
 ::-webkit-scrollbar-thumb {
     background: var(--gold);
     border-radius: 10px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
     background: var(--gold-dark);
 }
 
-/* صفحه‌ها */
 .page {
     display: none;
     width: 100vw;
     height: 100vh;
 }
-
 .page.active {
     display: flex;
 }
 
-/* صفحه لاگین */
-#loginPage {
+/* ===== صفحه احراز هویت ===== */
+#authPage {
     background: radial-gradient(ellipse at center, var(--dark) 0%, var(--black) 100%);
     justify-content: center;
     align-items: center;
@@ -66,7 +60,7 @@ body {
     overflow: hidden;
 }
 
-#loginPage::before {
+#authPage::before {
     content: '';
     position: absolute;
     width: 600px;
@@ -78,7 +72,7 @@ body {
     animation: float 20s ease-in-out infinite;
 }
 
-#loginPage::after {
+#authPage::after {
     content: '';
     position: absolute;
     width: 500px;
@@ -96,12 +90,12 @@ body {
     66% { transform: translate(-20px, 20px) scale(0.95); }
 }
 
-.login-container {
+.auth-container {
     background: rgba(26, 26, 26, 0.95);
     backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 215, 0, 0.15);
     border-radius: 30px;
-    padding: 60px 50px;
+    padding: 50px 40px;
     width: 420px;
     max-width: 90%;
     position: relative;
@@ -111,19 +105,13 @@ body {
 }
 
 @keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(40px) scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+    from { opacity: 0; transform: translateY(40px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.login-header {
+.auth-header {
     text-align: center;
-    margin-bottom: 40px;
+    margin-bottom: 30px;
 }
 
 .logo {
@@ -153,12 +141,46 @@ body {
     color: var(--text-gray);
     font-size: 1rem;
     letter-spacing: 2px;
+    opacity: 0.7;
 }
 
-.login-form {
+.auth-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 25px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 15px;
+    padding: 5px;
+}
+
+.auth-tab {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-gray);
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: 'Vazirmatn', sans-serif;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+.auth-tab.active {
+    background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+    color: var(--black);
+    font-weight: 700;
+    box-shadow: 0 5px 20px rgba(255, 215, 0, 0.2);
+}
+
+.auth-tab:hover:not(.active) {
+    background: rgba(255, 215, 0, 0.05);
+}
+
+.auth-form {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 15px;
 }
 
 .input-group {
@@ -227,20 +249,26 @@ body {
     transform: translateY(0);
 }
 
-.login-footer {
+.golden-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.auth-footer {
     text-align: center;
-    margin-top: 20px;
+    margin-top: 25px;
     color: var(--text-gray);
     font-size: 0.85rem;
     opacity: 0.6;
 }
 
-.login-footer strong {
+.auth-footer strong {
     color: var(--gold);
     opacity: 1;
 }
 
-/* صفحه اصلی */
+/* ===== صفحه اصلی ===== */
 #mainPage {
     background: var(--black);
 }
@@ -288,7 +316,7 @@ body {
 
 .sidebar-actions {
     display: flex;
-    gap: 8px;
+    gap: 5px;
 }
 
 .icon-btn {
@@ -388,6 +416,7 @@ body {
     margin-left: 15px;
     flex-shrink: 0;
     position: relative;
+    font-weight: 700;
 }
 
 .chat-item .chat-avatar .online-dot {
@@ -438,15 +467,6 @@ body {
     opacity: 0.5;
     margin-right: auto;
     margin-left: 10px;
-}
-
-.chat-item .unread-badge {
-    background: var(--gold);
-    color: var(--black);
-    font-size: 0.7rem;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-weight: 700;
 }
 
 /* منطقه چت */
@@ -551,14 +571,8 @@ body {
 }
 
 @keyframes messageIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px) scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+    from { opacity: 0; transform: translateY(10px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .message.sent {
@@ -702,14 +716,8 @@ body {
 }
 
 @keyframes slideInRight {
-    from {
-        opacity: 0;
-        transform: translateX(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+    from { opacity: 0; transform: translateX(30px); }
+    to { opacity: 1; transform: translateX(0); }
 }
 
 .profile-header {
@@ -741,7 +749,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 3rem;
+    font-size: 4rem;
     color: var(--black);
     position: relative;
     margin-bottom: 20px;
@@ -782,7 +790,7 @@ body {
     background: rgba(255, 255, 255, 0.03);
     border-radius: 15px;
     padding: 20px;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
 }
 
 .profile-bio-section h4 {
@@ -808,6 +816,7 @@ body {
     font-family: 'Vazirmatn', sans-serif;
     margin-top: 10px;
     width: 100%;
+    font-size: 0.9rem;
 }
 
 .edit-bio-btn:hover {
@@ -864,43 +873,7 @@ body {
     border-color: #ff4444;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-    .sidebar {
-        width: 100%;
-        min-width: unset;
-        position: absolute;
-        z-index: 20;
-        height: 100vh;
-        transition: transform 0.3s ease;
-    }
-    
-    .sidebar.hidden {
-        transform: translateX(-100%);
-    }
-    
-    .profile-sidebar {
-        width: 100%;
-        min-width: unset;
-        position: absolute;
-        z-index: 30;
-        height: 100vh;
-    }
-    
-    .chat-area {
-        width: 100%;
-    }
-    
-    .login-container {
-        padding: 40px 25px;
-    }
-    
-    .message {
-        max-width: 85%;
-    }
-}
-
-/* حالت تایپینگ */
+/* تایپینگ */
 .typing-indicator {
     display: flex;
     align-items: center;
@@ -920,36 +893,87 @@ body {
     animation: typing 1.4s infinite;
 }
 
-.typing-indicator span:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.typing-indicator span:nth-child(3) {
-    animation-delay: 0.4s;
-}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
 
 @keyframes typing {
-    0%, 60%, 100% {
-        transform: translateY(0);
-        opacity: 0.3;
-    }
-    30% {
-        transform: translateY(-8px);
-        opacity: 1;
-    }
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+    30% { transform: translateY(-8px); opacity: 1; }
 }
 
-/* اطلاعیه‌ها */
+/* نوتیفیکیشن */
 .notification {
     position: fixed;
     bottom: 30px;
-    left: 30px;
+    left: 50%;
+    transform: translateX(-50%);
     background: var(--dark);
     border: 1px solid rgba(255, 215, 0, 0.2);
     border-radius: 15px;
-    padding: 15px 25px;
+    padding: 15px 30px;
     color: var(--text);
-    z-index: 1000;
-    animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 10000;
     box-shadow: var(--shadow);
+    animation: slideUp 0.3s ease;
+    font-family: 'Vazirmatn', sans-serif;
+    max-width: 90%;
+    text-align: center;
+}
+
+.notification.error {
+    border-color: #ff4444;
+    background: #2a0a0a;
+}
+
+/* منوی پیام */
+.message-menu {
+    position: fixed;
+    background: var(--dark);
+    border: 1px solid rgba(255, 215, 0, 0.2);
+    border-radius: 12px;
+    padding: 8px;
+    z-index: 9999;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+    min-width: 150px;
+}
+
+.message-menu button:hover {
+    background: rgba(255, 215, 0, 0.05);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        min-width: unset;
+        position: absolute;
+        z-index: 20;
+        height: 100vh;
+        transition: transform 0.3s ease;
+    }
+    .sidebar.hidden {
+        transform: translateX(-100%);
+    }
+    .profile-sidebar {
+        width: 100%;
+        min-width: unset;
+        position: absolute;
+        z-index: 30;
+        height: 100vh;
+    }
+    .chat-area {
+        width: 100%;
+    }
+    .auth-container {
+        padding: 30px 20px;
+    }
+    .message {
+        max-width: 85%;
+    }
+    .logo {
+        font-size: 2.2rem;
+    }
+    .logo i {
+        font-size: 2.5rem;
+    }
 }
