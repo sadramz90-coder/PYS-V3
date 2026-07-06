@@ -1,5 +1,10 @@
-// اتصال به سرور
-const socket = io();
+// اتصال به سرور با تنظیمات بهتر
+const socket = io({
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000
+});
 
 // متغیرهای جهانی
 let currentUser = null;
@@ -8,6 +13,7 @@ let chatHistory = {};
 let allUsers = {};
 let allGroups = {};
 let onlineUsersList = [];
+let pendingMessages = {}; // برای پیام‌های در حال ارسال
 
 // عناصر DOM
 const loginPage = document.getElementById('loginPage');
@@ -78,7 +84,6 @@ loginBtn.addEventListener('click', () => {
         return;
     }
     
-    // نمایش وضعیت
     loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال اتصال...';
     loginBtn.disabled = true;
     
@@ -107,9 +112,10 @@ socket.on('userRegistered', (data) => {
     updateProfile();
     showNotification(`به PYS خوش آمدید ${currentUser.nickname || currentUser.username}! 🖤💛`);
     
-    // بازیابی دکمه لاگین
     loginBtn.innerHTML = '<i class="fas fa-rocket"></i> ورود به PYS';
     loginBtn.disabled = false;
+    
+    console.log('✅ کاربر ثبت شد:', currentUser.username);
 });
 
 // خطاها
@@ -125,7 +131,6 @@ function updateChatList() {
     
     if (!currentUser) return;
     
-    // چت‌های خصوصی
     const contacts = Object.keys(allUsers).filter(u => u !== currentUser.username);
     
     if (contacts.length === 0) {
@@ -172,36 +177,6 @@ function updateChatList() {
         
         chatList.appendChild(chatItem);
     });
-    
-    // چت‌های گروهی
-    Object.keys(allGroups).forEach(groupId => {
-        const group = allGroups[groupId];
-        if (group.members && group.members.includes(currentUser.username)) {
-            const chatItem = document.createElement('div');
-            chatItem.className = `chat-item ${currentChat === groupId ? 'active' : ''}`;
-            chatItem.dataset.chatId = groupId;
-            chatItem.dataset.type = 'group';
-            
-            const lastMsg = chatHistory[groupId] && chatHistory[groupId].length > 0 ? 
-                chatHistory[groupId][chatHistory[groupId].length - 1] : null;
-            
-            chatItem.innerHTML = `
-                <div class="chat-avatar">
-                    <i class="fas fa-users"></i>
-                </div>
-                <div class="chat-info">
-                    <div class="chat-name">${group.name}</div>
-                    <div class="chat-last-msg">${lastMsg ? lastMsg.message : 'گروه خالی'}</div>
-                </div>
-            `;
-            
-            chatItem.addEventListener('click', () => {
-                openChat(groupId, 'group');
-            });
-            
-            chatList.appendChild(chatItem);
-        }
-    });
 }
 
 // باز کردن چت
@@ -211,12 +186,10 @@ function openChat(chatId, type) {
     currentChat = chatId;
     console.log('📂 باز کردن چت:', chatId, 'نوع:', type);
     
-    // به‌روزرسانی لیست
     document.querySelectorAll('.chat-item').forEach(el => {
         el.classList.toggle('active', el.dataset.chatId === chatId);
     });
     
-    // آپدیت هدر
     if (type === 'private') {
         const user = allUsers[chatId];
         if (!user) {
@@ -242,13 +215,8 @@ function openChat(chatId, type) {
         chatAvatar.innerHTML = `<i class="fas fa-users" style="font-size:2.5rem;"></i>`;
     }
     
-    // پیوستن به اتاق
     socket.emit('joinChat', { chatId });
-    
-    // نمایش پیام‌ها
     loadMessages(chatId);
-    
-    // فوکوس روی اینپوت
     messageInput.focus();
 }
 
@@ -267,7 +235,6 @@ function loadMessages(chatId) {
         return;
     }
     
-    // نمایش پیام‌ها به ترتیب
     chatHistory[chatId].forEach(msg => {
         appendMessage(msg);
     });
@@ -289,7 +256,6 @@ function appendMessage(msg) {
     if (msg.deleted) {
         content = `<div class="msg-text" style="opacity:0.4;font-style:italic;">🗑️ این پیام حذف شده است</div>`;
     } else {
-        // ریپلای
         if (msg.replyTo) {
             const repliedMsg = chatHistory[msg.to]?.find(m => m.id === msg.replyTo);
             if (repliedMsg) {
@@ -313,7 +279,6 @@ function appendMessage(msg) {
     
     msgDiv.innerHTML = content;
     
-    // کلیک راست برای منوی حذف/ویرایش (فقط برای پیام‌های خود)
     if (isSent && !msg.deleted) {
         msgDiv.addEventListener('contextmenu', (e) => {
             e.preventDefault();
@@ -326,7 +291,6 @@ function appendMessage(msg) {
 
 // منوی پیام
 function showMessageMenu(msgId, chatId) {
-    // حذف منوی قبلی
     document.querySelector('.message-menu')?.remove();
     
     const menu = document.createElement('div');
@@ -353,7 +317,6 @@ function showMessageMenu(msgId, chatId) {
     
     document.body.appendChild(menu);
     
-    // موقعیت منو
     const rect = menu.getBoundingClientRect();
     let x = event.clientX;
     let y = event.clientY;
@@ -368,7 +331,6 @@ function showMessageMenu(msgId, chatId) {
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
     
-    // بستن منو با کلیک خارج
     setTimeout(() => {
         document.addEventListener('click', () => {
             menu.remove();
@@ -376,21 +338,19 @@ function showMessageMenu(msgId, chatId) {
     }, 100);
 }
 
-// ویرایش پیام (دسترسی global)
+// ویرایش پیام
 window.editMessage = function(msgId, chatId) {
     const newText = prompt('متن جدید:', '');
     if (newText !== null && newText.trim()) {
         socket.emit('editMessage', { chatId, messageId: msgId, newText: newText.trim() });
-        showNotification('✏️ پیام در حال ویرایش...');
     }
     document.querySelector('.message-menu')?.remove();
 };
 
-// حذف پیام (دسترسی global)
+// حذف پیام
 window.deleteMessage = function(msgId, chatId) {
     if (confirm('🗑️ آیا از حذف این پیام مطمئن هستید؟')) {
         socket.emit('deleteMessage', { chatId, messageId: msgId });
-        showNotification('🗑️ پیام حذف شد');
     }
     document.querySelector('.message-menu')?.remove();
 };
@@ -421,7 +381,6 @@ function sendMessage() {
     
     console.log('📤 ارسال پیام به:', currentChat, 'متن:', text.substring(0, 20));
     
-    // ارسال پیام به سرور
     socket.emit('sendMessage', {
         chatId: currentChat,
         message: text,
@@ -429,45 +388,21 @@ function sendMessage() {
         replyTo: null
     });
     
-    // پاک کردن اینپوت
     messageInput.value = '';
     messageInput.focus();
-    
-    // نمایش پیام به صورت موقت در سمت کلاینت
-    const tempMsg = {
-        id: 'temp_' + Date.now(),
-        from: currentUser.username,
-        to: currentChat,
-        message: text,
-        type: 'text',
-        timestamp: new Date().toISOString(),
-        deleted: false,
-        edited: false
-    };
-    
-    // اضافه به تاریخچه
-    if (!chatHistory[currentChat]) {
-        chatHistory[currentChat] = [];
-    }
-    chatHistory[currentChat].push(tempMsg);
-    appendMessage(tempMsg);
-    scrollToBottom();
 }
 
-// رویداد ارسال پیام (دکمه)
-sendBtn.addEventListener('click', sendMessage);
-
-// رویداد ارسال پیام (Enter)
-messageInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
-});
-
-// دریافت پیام جدید
+// *** رویداد اصلی دریافت پیام - اینجا مشکل را حل می‌کند ***
 socket.on('newMessage', (msg) => {
-    console.log('📨 پیام جدید دریافت شد:', msg.from, '->', msg.to);
+    console.log('📨 پیام جدید دریافت شد از:', msg.from, 'به:', msg.to, 'متن:', msg.message.substring(0, 20));
+    
+    // بررسی اینکه پیام برای کاربر جاری است یا خیر
+    const isForMe = msg.to === currentUser.username || msg.from === currentUser.username;
+    
+    if (!isForMe) {
+        console.log('⏭️ پیام برای کاربر دیگر است، نادیده گرفته شد');
+        return;
+    }
     
     // ذخیره در تاریخچه
     if (!chatHistory[msg.to]) {
@@ -480,16 +415,25 @@ socket.on('newMessage', (msg) => {
         chatHistory[msg.to].push(msg);
         
         // اگر چت باز است، نمایش بده
-        if (currentChat === msg.to) {
-            // حذف پیام موقت (اگر وجود داشته باشد)
-            const tempIndex = chatHistory[msg.to].findIndex(m => m.id.startsWith('temp_'));
-            if (tempIndex !== -1) {
-                chatHistory[msg.to].splice(tempIndex, 1);
-            }
+        if (currentChat === msg.to || currentChat === msg.from) {
             loadMessages(msg.to);
         }
         
+        // به‌روزرسانی لیست چت‌ها
         updateChatList();
+        
+        // اعلان
+        if (msg.from !== currentUser.username) {
+            const sender = allUsers[msg.from]?.nickname || msg.from;
+            showNotification(`📩 پیام جدید از ${sender}`);
+            
+            // پخش صدا (اختیاری)
+            try {
+                const audio = new Audio('data:audio/wav;base64,UklGRnoAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoAAACBhYqFhYWQhZKFhYaFhZGFkYWNhZGFkYWRhZGFkYWShZKFj4WPhY+Fj4WNhZGFkYWRhZGFjoWPhZCFkIWRhZCFj4WPhY2FkoWShZKFjYWPhZCFkIWRhY6FkoWShZKFjYWRhZGFkIWRhZCFj4WQhZCFjYWRhZGFj4WPhZCFkIWRhZCFj4WNhZGFkIWRhZCFj4WRhZCFkIWRhZCFj4WQhZCFj4WP');
+                audio.volume = 0.3;
+                audio.play().catch(() => {});
+            } catch(e) {}
+        }
     }
 });
 
@@ -497,6 +441,18 @@ socket.on('newMessage', (msg) => {
 socket.on('messageSent', (data) => {
     if (data.success) {
         console.log('✅ پیام با موفقیت ارسال شد:', data.messageId);
+    }
+});
+
+// تاریخچه چت
+socket.on('chatHistory', (data) => {
+    const { chatId, messages: msgs } = data;
+    if (!chatHistory[chatId]) {
+        chatHistory[chatId] = [];
+    }
+    chatHistory[chatId] = msgs;
+    if (currentChat === chatId) {
+        loadMessages(chatId);
     }
 });
 
@@ -576,7 +532,6 @@ editBioBtn.addEventListener('click', () => {
     const newBio = prompt('بیوگرافی جدید:', currentUser.bio);
     if (newBio !== null && newBio.trim()) {
         socket.emit('updateBio', { bio: newBio.trim() });
-        showNotification('📝 در حال به‌روزرسانی بیو...');
     }
 });
 
@@ -633,7 +588,7 @@ newChatBtn.addEventListener('click', () => {
     }
 });
 
-// نمایش تایپینگ
+// تایپینگ
 let typingTimeout = null;
 messageInput.addEventListener('input', () => {
     if (currentChat) {
@@ -654,7 +609,7 @@ socket.on('userTyping', (data) => {
     }
 });
 
-// اضافه کردن استایل برای منوی پیام
+// اضافه کردن استایل
 const style = document.createElement('style');
 style.textContent = `
     .message-menu button:hover {
@@ -676,12 +631,11 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// لاگ در کنسول
+// لاگ
 console.log('🖤💛 PYS Messenger v2.0');
 console.log('👤 طراحی شده توسط S A D R A');
 console.log('📡 اتصال به سرور...');
 
-// تست اتصال
 socket.on('connect', () => {
     console.log('✅ اتصال به سرور برقرار شد!');
 });
@@ -689,4 +643,13 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
     console.log('❌ اتصال به سرور قطع شد!');
     showNotification('⚠️ اتصال به سرور قطع شد!', 'error');
+});
+
+// رویداد sendBtn
+sendBtn.addEventListener('click', sendMessage);
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
 });
