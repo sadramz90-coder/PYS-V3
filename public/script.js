@@ -13,7 +13,7 @@ let chatHistory = {};
 let allUsers = {};
 let allGroups = {};
 let onlineUsersList = [];
-let pendingMessages = {}; // برای پیام‌های در حال ارسال
+let isMessageSending = false;
 
 // عناصر DOM
 const loginPage = document.getElementById('loginPage');
@@ -148,8 +148,8 @@ function updateChatList() {
     contacts.forEach(username => {
         const user = allUsers[username];
         const chatId = username;
-        const lastMsg = chatHistory[chatId] && chatHistory[chatId].length > 0 ? 
-            chatHistory[chatId][chatHistory[chatId].length - 1] : null;
+        const msgs = chatHistory[chatId] || [];
+        const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
         const isOnline = onlineUsersList.includes(username);
         
         const chatItem = document.createElement('div');
@@ -220,11 +220,13 @@ function openChat(chatId, type) {
     messageInput.focus();
 }
 
-// بارگذاری پیام‌ها
+// *** بارگذاری پیام‌ها - نسخه اصلاح شده ***
 function loadMessages(chatId) {
     messagesContainer.innerHTML = '';
     
-    if (!chatHistory[chatId] || chatHistory[chatId].length === 0) {
+    const msgs = chatHistory[chatId] || [];
+    
+    if (msgs.length === 0) {
         messagesContainer.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-comments"></i>
@@ -235,16 +237,23 @@ function loadMessages(chatId) {
         return;
     }
     
-    chatHistory[chatId].forEach(msg => {
+    // نمایش همه پیام‌ها
+    msgs.forEach(msg => {
         appendMessage(msg);
     });
     
     scrollToBottom();
 }
 
-// افزودن پیام به صفحه
+// *** افزودن پیام به صفحه - بدون بازسازی کامل ***
 function appendMessage(msg) {
     if (!msg) return;
+    
+    // بررسی اینکه آیا پیام قبلاً اضافه شده یا نه
+    const existingMsg = document.querySelector(`[data-msg-id="${msg.id}"]`);
+    if (existingMsg) {
+        return; // پیام قبلاً وجود دارد
+    }
     
     const isSent = msg.from === currentUser.username;
     const msgDiv = document.createElement('div');
@@ -279,11 +288,18 @@ function appendMessage(msg) {
     
     msgDiv.innerHTML = content;
     
+    // منوی کلیک راست برای پیام‌های خود
     if (isSent && !msg.deleted) {
         msgDiv.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             showMessageMenu(msg.id, msg.to);
         });
+    }
+    
+    // حذف پیام خالی (اگر وجود داشته باشد)
+    const emptyState = messagesContainer.querySelector('.empty-state');
+    if (emptyState) {
+        emptyState.remove();
     }
     
     messagesContainer.appendChild(msgDiv);
@@ -365,7 +381,7 @@ function scrollToBottom() {
     }
 }
 
-// ارسال پیام
+// *** ارسال پیام - اصلاح شده ***
 function sendMessage() {
     const text = messageInput.value.trim();
     
@@ -379,6 +395,11 @@ function sendMessage() {
         return;
     }
     
+    if (isMessageSending) {
+        return;
+    }
+    
+    isMessageSending = true;
     console.log('📤 ارسال پیام به:', currentChat, 'متن:', text.substring(0, 20));
     
     socket.emit('sendMessage', {
@@ -390,44 +411,57 @@ function sendMessage() {
     
     messageInput.value = '';
     messageInput.focus();
+    
+    setTimeout(() => {
+        isMessageSending = false;
+    }, 500);
 }
 
-// *** رویداد اصلی دریافت پیام - اینجا مشکل را حل می‌کند ***
+// *** رویداد اصلی دریافت پیام - نسخه نهایی ***
 socket.on('newMessage', (msg) => {
     console.log('📨 پیام جدید دریافت شد از:', msg.from, 'به:', msg.to, 'متن:', msg.message.substring(0, 20));
     
-    // بررسی اینکه پیام برای کاربر جاری است یا خیر
-    const isForMe = msg.to === currentUser.username || msg.from === currentUser.username;
+    // تعیین چت آیدی صحیح
+    let chatId = msg.to;
     
-    if (!isForMe) {
-        console.log('⏭️ پیام برای کاربر دیگر است، نادیده گرفته شد');
+    // اگر پیام از طرف کاربر جاری است، چت آیدی همان msg.to است
+    // اگر پیام برای کاربر جاری است، چت آیدی همون msg.from است
+    if (msg.to === currentUser.username) {
+        chatId = msg.from;
+    } else if (msg.from === currentUser.username) {
+        chatId = msg.to;
+    } else {
+        // پیام برای کاربر دیگری است
+        console.log('⏭️ پیام برای کاربر دیگر است');
         return;
     }
     
-    // ذخیره در تاریخچه
-    if (!chatHistory[msg.to]) {
-        chatHistory[msg.to] = [];
+    // ذخیره در تاریخچه با آیدی صحیح
+    if (!chatHistory[chatId]) {
+        chatHistory[chatId] = [];
     }
     
     // بررسی تکراری نبودن
-    const exists = chatHistory[msg.to].some(m => m.id === msg.id);
+    const exists = chatHistory[chatId].some(m => m.id === msg.id);
     if (!exists) {
-        chatHistory[msg.to].push(msg);
+        chatHistory[chatId].push(msg);
+        console.log(`✅ پیام به تاریخچه ${chatId} اضافه شد. تعداد کل: ${chatHistory[chatId].length}`);
         
-        // اگر چت باز است، نمایش بده
-        if (currentChat === msg.to || currentChat === msg.from) {
-            loadMessages(msg.to);
+        // اگر چت باز است، پیام را نمایش بده
+        if (currentChat === chatId) {
+            appendMessage(msg);
+            scrollToBottom();
         }
         
         // به‌روزرسانی لیست چت‌ها
         updateChatList();
         
-        // اعلان
+        // اعلان برای پیام‌های دریافتی
         if (msg.from !== currentUser.username) {
             const sender = allUsers[msg.from]?.nickname || msg.from;
             showNotification(`📩 پیام جدید از ${sender}`);
             
-            // پخش صدا (اختیاری)
+            // پخش صدا
             try {
                 const audio = new Audio('data:audio/wav;base64,UklGRnoAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoAAACBhYqFhYWQhZKFhYaFhZGFkYWNhZGFkYWRhZGFkYWShZKFj4WPhY+Fj4WNhZGFkYWRhZGFjoWPhZCFkIWRhZCFj4WPhY2FkoWShZKFjYWPhZCFkIWRhY6FkoWShZKFjYWRhZGFkIWRhZCFj4WQhZCFjYWRhZGFj4WPhZCFkIWRhZCFj4WNhZGFkIWRhZCFj4WRhZCFkIWRhZCFj4WQhZCFj4WP');
                 audio.volume = 0.3;
@@ -464,8 +498,21 @@ socket.on('messageEdited', (data) => {
         if (msg) {
             msg.message = newText;
             msg.edited = true;
-            if (currentChat === chatId) {
-                loadMessages(chatId);
+            // به‌روزرسانی نمایش
+            const msgElement = document.querySelector(`[data-msg-id="${messageId}"]`);
+            if (msgElement) {
+                const textDiv = msgElement.querySelector('.msg-text');
+                if (textDiv) {
+                    textDiv.textContent = newText;
+                }
+                // اضافه کردن برچسب ویرایش شده
+                let editedSpan = msgElement.querySelector('.msg-edited');
+                if (!editedSpan) {
+                    editedSpan = document.createElement('span');
+                    editedSpan.className = 'msg-edited';
+                    editedSpan.textContent = '✏️ ویرایش شده';
+                    msgElement.querySelector('.msg-time').before(editedSpan);
+                }
             }
             showNotification('✏️ پیام ویرایش شد');
         }
@@ -480,9 +527,17 @@ socket.on('messageDeleted', (data) => {
         if (msg) {
             msg.deleted = true;
             msg.message = 'این پیام حذف شده است';
-            if (currentChat === chatId) {
-                loadMessages(chatId);
+            // به‌روزرسانی نمایش
+            const msgElement = document.querySelector(`[data-msg-id="${messageId}"]`);
+            if (msgElement) {
+                const textDiv = msgElement.querySelector('.msg-text');
+                if (textDiv) {
+                    textDiv.textContent = '🗑️ این پیام حذف شده است';
+                    textDiv.style.opacity = '0.4';
+                    textDiv.style.fontStyle = 'italic';
+                }
             }
+            showNotification('🗑️ پیام حذف شد');
         }
     }
 });
@@ -589,7 +644,6 @@ newChatBtn.addEventListener('click', () => {
 });
 
 // تایپینگ
-let typingTimeout = null;
 messageInput.addEventListener('input', () => {
     if (currentChat) {
         socket.emit('typing', { chatId: currentChat });
@@ -632,7 +686,7 @@ style.textContent = `
 document.head.appendChild(style);
 
 // لاگ
-console.log('🖤💛 PYS Messenger v2.0');
+console.log('🖤💛 PYS Messenger v3.0 - Final Version');
 console.log('👤 طراحی شده توسط S A D R A');
 console.log('📡 اتصال به سرور...');
 
@@ -645,7 +699,7 @@ socket.on('disconnect', () => {
     showNotification('⚠️ اتصال به سرور قطع شد!', 'error');
 });
 
-// رویداد sendBtn
+// رویدادهای دکمه‌ها
 sendBtn.addEventListener('click', sendMessage);
 messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -653,3 +707,13 @@ messageInput.addEventListener('keypress', (e) => {
         sendMessage();
     }
 });
+
+// تابع برای رفرش دستی پیام‌ها (در صورت نیاز)
+window.refreshMessages = function() {
+    if (currentChat) {
+        loadMessages(currentChat);
+        showNotification('🔄 پیام‌ها به‌روزرسانی شدند');
+    }
+};
+
+console.log('💡 برای رفرش دستی پیام‌ها: refreshMessages()');
