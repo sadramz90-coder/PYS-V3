@@ -9,8 +9,10 @@ const server = http.createServer(app);
 const io = socketIo(server, {
     cors: {
         origin: "*",
-        methods: ["GET", "POST"]
-    }
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    transports: ['websocket', 'polling']
 });
 
 const PORT = process.env.PORT || 3000;
@@ -150,12 +152,20 @@ io.on('connection', (socket) => {
             const { chatId } = data;
             socket.join(chatId);
             console.log(`📌 کاربر ${currentUser} به چت ${chatId} پیوست`);
+            
+            // ارسال تاریخچه چت به کاربر
+            if (messages[chatId]) {
+                socket.emit('chatHistory', {
+                    chatId: chatId,
+                    messages: messages[chatId]
+                });
+            }
         } catch (error) {
             console.error('❌ خطا در پیوستن به چت:', error);
         }
     });
     
-    // ارسال پیام - بخش اصلی
+    // ارسال پیام - بخش اصلی با رفع باگ
     socket.on('sendMessage', (data) => {
         try {
             const { chatId, message, type = 'text', replyTo = null } = data;
@@ -189,22 +199,24 @@ io.on('connection', (socket) => {
             // ذخیره پیام
             addMessage(chatId, msg);
             
-            // ارسال به همه کاربران در چت (اتاق)
+            // *** راه حل اصلی: ارسال به همه کاربران در اتاق ***
+            // 1. ارسال به همه کاربرانی که در این اتاق هستند (از جمله فرستنده و گیرنده)
             io.to(chatId).emit('newMessage', msg);
+            console.log(`📨 پیام به اتاق ${chatId} ارسال شد`);
             
-            // اگر چت خصوصی است، به کاربر مقابل هم ارسال شود
+            // 2. اگر چت خصوصی است، به کاربر مقابل هم ارسال شود (به صورت مستقیم)
             if (!chatId.startsWith('group_')) {
                 const targetSocketId = onlineUsers.get(chatId);
                 if (targetSocketId) {
-                    // به کاربر مقابل مستقیماً ارسال می‌شود
+                    // ارسال مستقیم به کاربر مقابل
                     io.to(targetSocketId).emit('newMessage', msg);
-                    console.log(`📨 پیام به کاربر ${chatId} ارسال شد`);
+                    console.log(`📨 پیام به کاربر ${chatId} ارسال شد (مستقیم)`);
                 } else {
                     console.log(`⚠️ کاربر ${chatId} آفلاین است`);
                 }
             }
             
-            // تأیید ارسال به فرستنده
+            // 3. تأیید ارسال به فرستنده
             socket.emit('messageSent', { 
                 success: true, 
                 messageId: msg.id,
@@ -406,7 +418,8 @@ app.get('/test', (req, res) => {
         message: 'PYS Messenger is running!',
         designer: 'S A D R A',
         users: Object.keys(users).length,
-        groups: Object.keys(groups).length
+        groups: Object.keys(groups).length,
+        onlineUsers: Array.from(onlineUsers.keys())
     });
 });
 
