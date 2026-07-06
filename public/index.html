@@ -9,32 +9,64 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
-    <!-- صفحه لاگین -->
-    <div id="loginPage" class="page active">
-        <div class="login-container">
-            <div class="login-header">
+    <!-- صفحه ورود/ثبت نام -->
+    <div id="authPage" class="page active">
+        <div class="auth-container">
+            <div class="auth-header">
                 <div class="logo">
                     <i class="fas fa-crown"></i>
                     <span>PYS</span>
                 </div>
                 <div class="subtitle">پیام‌رسان طلایی</div>
             </div>
-            <div class="login-form">
+            
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">ورود</button>
+                <button class="auth-tab" data-tab="register">ثبت نام</button>
+            </div>
+            
+            <!-- فرم ورود -->
+            <div class="auth-form" id="loginForm">
                 <div class="input-group">
                     <i class="fas fa-user"></i>
-                    <input type="text" id="usernameInput" placeholder="نام کاربری" maxlength="20">
+                    <input type="text" id="loginUsername" placeholder="نام کاربری" maxlength="20">
+                </div>
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="loginPassword" placeholder="رمز عبور" maxlength="30">
+                </div>
+                <button id="loginBtn" class="golden-btn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    ورود به PYS
+                </button>
+            </div>
+            
+            <!-- فرم ثبت نام -->
+            <div class="auth-form" id="registerForm" style="display:none;">
+                <div class="input-group">
+                    <i class="fas fa-user"></i>
+                    <input type="text" id="registerUsername" placeholder="نام کاربری" maxlength="20">
                 </div>
                 <div class="input-group">
                     <i class="fas fa-user-tag"></i>
-                    <input type="text" id="nicknameInput" placeholder="نام نمایشی (اختیاری)" maxlength="30">
+                    <input type="text" id="registerNickname" placeholder="نام نمایشی (اختیاری)" maxlength="30">
                 </div>
-                <button id="loginBtn" class="golden-btn">
-                    <i class="fas fa-rocket"></i>
-                    ورود به PYS
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="registerPassword" placeholder="رمز عبور" maxlength="30">
+                </div>
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="registerConfirmPassword" placeholder="تکرار رمز عبور" maxlength="30">
+                </div>
+                <button id="registerBtn" class="golden-btn">
+                    <i class="fas fa-user-plus"></i>
+                    ثبت نام در PYS
                 </button>
-                <div class="login-footer">
-                    <span>طراحی شده با 🖤 توسط <strong>S A D R A</strong></span>
-                </div>
+            </div>
+            
+            <div class="auth-footer">
+                <span>طراحی شده با 🖤 توسط <strong>S A D R A</strong></span>
             </div>
         </div>
     </div>
@@ -42,7 +74,7 @@
     <!-- صفحه اصلی پیام‌رسان -->
     <div id="mainPage" class="page">
         <div class="app-container">
-            <!-- سایدبار چپ - لیست چت‌ها -->
+            <!-- سایدبار چپ -->
             <div class="sidebar">
                 <div class="sidebar-header">
                     <div class="sidebar-logo">
@@ -53,27 +85,25 @@
                         <button id="newChatBtn" class="icon-btn" title="چت جدید">
                             <i class="fas fa-plus"></i>
                         </button>
-                        <button id="settingsBtn" class="icon-btn" title="تنظیمات">
-                            <i class="fas fa-cog"></i>
+                        <button id="newGroupBtn" class="icon-btn" title="گروه جدید">
+                            <i class="fas fa-users"></i>
+                        </button>
+                        <button id="settingsBtn" class="icon-btn" title="پروفایل">
+                            <i class="fas fa-user-circle"></i>
                         </button>
                     </div>
                 </div>
                 
-                <!-- جستجو -->
                 <div class="search-box">
                     <i class="fas fa-search"></i>
                     <input type="text" id="searchChat" placeholder="جستجوی چت‌ها...">
                 </div>
                 
-                <!-- لیست چت‌ها -->
-                <div class="chat-list" id="chatList">
-                    <!-- چت‌ها به صورت داینامیک ساخته می‌شوند -->
-                </div>
+                <div class="chat-list" id="chatList"></div>
             </div>
             
-            <!-- منطقه اصلی چت -->
+            <!-- منطقه چت -->
             <div class="chat-area" id="chatArea">
-                <!-- هدر چت -->
                 <div class="chat-header" id="chatHeader">
                     <div class="chat-user-info">
                         <div class="chat-avatar" id="chatAvatar">
@@ -85,22 +115,14 @@
                         </div>
                     </div>
                     <div class="chat-actions">
-                        <button id="callBtn" class="icon-btn" title="تماس صوتی">
-                            <i class="fas fa-phone"></i>
-                        </button>
-                        <button id="videoCallBtn" class="icon-btn" title="تماس تصویری">
-                            <i class="fas fa-video"></i>
-                        </button>
                         <button id="groupInfoBtn" class="icon-btn" title="اطلاعات گروه">
                             <i class="fas fa-info-circle"></i>
                         </button>
                     </div>
                 </div>
                 
-                <!-- منطقه پیام‌ها -->
                 <div class="messages-container" id="messagesContainer">
                     <div class="messages" id="messages">
-                        <!-- پیام‌ها به صورت داینامیک ساخته می‌شوند -->
                         <div class="empty-state">
                             <i class="fas fa-comments"></i>
                             <p>هیچ پیامی وجود ندارد</p>
@@ -109,14 +131,10 @@
                     </div>
                 </div>
                 
-                <!-- ناحیه تایپ پیام -->
                 <div class="message-input-area">
                     <div class="input-actions">
                         <button class="icon-btn" id="emojiBtn">
                             <i class="fas fa-smile"></i>
-                        </button>
-                        <button class="icon-btn" id="attachBtn">
-                            <i class="fas fa-paperclip"></i>
                         </button>
                     </div>
                     <div class="input-wrapper">
@@ -128,7 +146,7 @@
                 </div>
             </div>
             
-            <!-- پروفایل سایدبار راست -->
+            <!-- پروفایل سایدبار -->
             <div class="profile-sidebar" id="profileSidebar">
                 <div class="profile-header">
                     <button class="icon-btn close-profile" id="closeProfile">
@@ -137,12 +155,13 @@
                     <h3>پروفایل</h3>
                 </div>
                 <div class="profile-content">
-                    <div class="profile-avatar">
-                        <img src="" alt="پروفایل" id="profileAvatar">
+                    <div class="profile-avatar" id="profileAvatar">
+                        <i class="fas fa-user-circle"></i>
                         <div class="profile-status" id="profileStatus"></div>
                     </div>
                     <div class="profile-name" id="profileName">نام کاربر</div>
                     <div class="profile-username" id="profileUsername">@username</div>
+                    
                     <div class="profile-bio-section">
                         <h4>بیوگرافی</h4>
                         <p id="profileBio">بیوگرافی خود را وارد کنید</p>
@@ -150,6 +169,15 @@
                             <i class="fas fa-edit"></i> ویرایش بیو
                         </button>
                     </div>
+                    
+                    <div class="profile-bio-section">
+                        <h4>نام نمایشی</h4>
+                        <p id="profileNickname">نام نمایشی</p>
+                        <button class="edit-bio-btn" id="editNicknameBtn">
+                            <i class="fas fa-edit"></i> ویرایش نام
+                        </button>
+                    </div>
+                    
                     <div class="profile-stats">
                         <div class="stat-item">
                             <i class="fas fa-calendar-alt"></i>
@@ -160,6 +188,7 @@
                             <span>آخرین بازدید: <span id="lastSeen">همین الان</span></span>
                         </div>
                     </div>
+                    
                     <div class="profile-actions">
                         <button class="profile-btn" id="logoutBtn">
                             <i class="fas fa-sign-out-alt"></i> خروج
