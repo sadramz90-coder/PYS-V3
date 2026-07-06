@@ -1,5 +1,5 @@
 // ============================================
-// PYS Messenger - Client Side
+// PYS Messenger v4.0 - Client Side
 // Designed by S A D R A 🖤💛
 // ============================================
 
@@ -19,6 +19,7 @@ let allGroups = {};
 let onlineUsersList = [];
 let authToken = null;
 let isMessageSending = false;
+let isAdmin = false;
 
 // ===== عناصر DOM =====
 const authPage = document.getElementById('authPage');
@@ -58,6 +59,13 @@ const searchChat = document.getElementById('searchChat');
 const settingsBtn = document.getElementById('settingsBtn');
 const newChatBtn = document.getElementById('newChatBtn');
 const newGroupBtn = document.getElementById('newGroupBtn');
+const adminPanelBtn = document.getElementById('adminPanelBtn');
+const adminPanel = document.getElementById('adminPanel');
+const closeAdmin = document.getElementById('closeAdmin');
+const usersListContainer = document.getElementById('usersListContainer');
+const totalUsers = document.getElementById('totalUsers');
+const totalGroups = document.getElementById('totalGroups');
+const specialBadge = document.getElementById('specialBadge');
 
 // ===== توابع کمکی =====
 
@@ -150,7 +158,6 @@ registerBtn.addEventListener('click', async () => {
         
         if (data.success) {
             showNotification('✅ ثبت نام با موفقیت انجام شد! حالا وارد شوید.');
-            // تغییر به تب ورود
             authTabs.forEach(t => t.classList.remove('active'));
             document.querySelector('[data-tab="login"]').classList.add('active');
             loginForm.style.display = 'flex';
@@ -194,9 +201,15 @@ loginBtn.addEventListener('click', async () => {
         if (data.success) {
             saveToken(data.token);
             currentUser = data.user;
-            showNotification(`✅ خوش آمدید ${currentUser.nickname}!`);
+            isAdmin = data.user.isAdmin || false;
             
-            // اتصال به Socket.IO با توکن
+            if (isAdmin) {
+                adminPanelBtn.style.display = 'flex';
+                showNotification('👑 خوش آمدید مدیر عزیز!');
+            } else {
+                showNotification(`✅ خوش آمدید ${currentUser.nickname}!`);
+            }
+            
             socket.emit('authenticate', { token: data.token });
         } else {
             showNotification(data.error || 'خطا در ورود!', 'error');
@@ -225,9 +238,15 @@ socket.on('authenticated', (data) => {
     allUsers = data.users;
     allGroups = data.groups;
     chatHistory = data.messages || {};
+    isAdmin = data.user.isAdmin || false;
     
     authPage.classList.remove('active');
     mainPage.classList.add('active');
+    
+    if (isAdmin) {
+        adminPanelBtn.style.display = 'flex';
+        showNotification('👑 به پنل مدیریت خوش آمدید!');
+    }
     
     updateChatList();
     updateProfile();
@@ -276,6 +295,7 @@ function updateChatList() {
         const msgs = chatHistory[chatId] || [];
         const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
         const isOnline = onlineUsersList.includes(username);
+        const isSpecial = user.isSpecial || false;
         
         const chatItem = document.createElement('div');
         chatItem.className = `chat-item ${currentChat === chatId ? 'active' : ''}`;
@@ -285,12 +305,16 @@ function updateChatList() {
         const avatarText = user.nickname ? user.nickname[0].toUpperCase() : username[0].toUpperCase();
         
         chatItem.innerHTML = `
-            <div class="chat-avatar">
+            <div class="chat-avatar ${isSpecial ? 'special-glow' : ''}">
                 ${avatarText}
                 <div class="${isOnline ? 'online-dot' : 'offline-dot'}"></div>
+                ${isSpecial ? `<div class="special-badge-small"><i class="fas fa-crown"></i></div>` : ''}
             </div>
             <div class="chat-info">
-                <div class="chat-name">${user.nickname || username}</div>
+                <div class="chat-name ${isSpecial ? 'special-name' : ''}">
+                    ${user.nickname || username}
+                    ${isSpecial ? '<span class="special-tag">👑 ویژه</span>' : ''}
+                </div>
                 <div class="chat-last-msg">${lastMsg ? (lastMsg.deleted ? '🗑️ پیام حذف شده' : lastMsg.message.substring(0, 30)) : '💬 شروع چت...'}</div>
             </div>
             <div class="chat-time">${lastMsg ? new Date(lastMsg.timestamp).toLocaleTimeString('fa-IR', {hour: '2-digit', minute: '2-digit'}) : ''}</div>
@@ -344,12 +368,23 @@ function openChat(chatId, type) {
             showNotification('کاربر یافت نشد!', 'error');
             return;
         }
+        const isSpecial = user.isSpecial || false;
         chatUsername.textContent = user.nickname || chatId;
-        chatUsername.style.color = '';
+        chatUsername.style.color = isSpecial ? 'var(--gold)' : '';
+        if (isSpecial) {
+            chatUsername.textContent += ' 👑';
+        }
         const isOnline = onlineUsersList.includes(chatId);
         chatStatus.textContent = isOnline ? '🟢 آنلاین' : '⚫ آفلاین';
         chatStatus.className = `chat-status ${isOnline ? 'online' : ''}`;
         chatAvatar.innerHTML = `<i class="fas fa-user-circle" style="font-size:2.5rem;"></i>`;
+        if (isSpecial) {
+            chatAvatar.style.background = 'linear-gradient(135deg, var(--gold), #FF6B00)';
+            chatAvatar.style.boxShadow = '0 0 30px rgba(255,215,0,0.3)';
+        } else {
+            chatAvatar.style.background = '';
+            chatAvatar.style.boxShadow = '';
+        }
     } else {
         const group = allGroups[chatId];
         if (!group) {
@@ -361,6 +396,8 @@ function openChat(chatId, type) {
         chatStatus.textContent = `👥 ${group.members ? group.members.length : 0} عضو`;
         chatStatus.className = 'chat-status';
         chatAvatar.innerHTML = `<i class="fas fa-users" style="font-size:2.5rem;"></i>`;
+        chatAvatar.style.background = '';
+        chatAvatar.style.boxShadow = '';
     }
     
     socket.emit('joinChat', { chatId });
@@ -395,6 +432,7 @@ function appendMessage(msg) {
     if (existingMsg) return;
     
     const isSent = msg.from === currentUser.username;
+    const isSpecial = allUsers[msg.from]?.isSpecial || false;
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${isSent ? 'sent' : 'received'}`;
     msgDiv.dataset.msgId = msg.id;
@@ -409,6 +447,11 @@ function appendMessage(msg) {
             if (repliedMsg) {
                 content += `<div class="msg-reply">${repliedMsg.message}</div>`;
             }
+        }
+        // نمایش نام فرستنده برای پیام‌های دریافتی (غیر از خود کاربر)
+        if (!isSent && msg.from) {
+            const sender = allUsers[msg.from]?.nickname || msg.from;
+            content += `<div style="font-size:0.7rem;color:var(--gold);margin-bottom:4px;">${sender} ${isSpecial ? '👑' : ''}</div>`;
         }
         content += `<div class="msg-text">${msg.message}</div>`;
         if (msg.edited) {
@@ -652,7 +695,18 @@ socket.on('userTyping', (data) => {
 
 function updateProfile() {
     if (!currentUser) return;
+    const isSpecial = currentUser.isSpecial || false;
+    
     profileName.textContent = currentUser.nickname || currentUser.username;
+    if (isSpecial) {
+        profileName.textContent += ' 👑';
+        profileName.style.color = 'var(--gold)';
+        specialBadge.style.display = 'flex';
+    } else {
+        profileName.style.color = '';
+        specialBadge.style.display = 'none';
+    }
+    
     profileNickname.textContent = currentUser.nickname || currentUser.username;
     profileUsername.textContent = `@${currentUser.username}`;
     profileBio.textContent = currentUser.bio || 'بیوگرافی خود را وارد کنید';
@@ -696,6 +750,114 @@ socket.on('userUpdated', (data) => {
         updateChatList();
     }
 });
+
+// ===== پنل مدیریت =====
+
+adminPanelBtn.addEventListener('click', async () => {
+    if (!isAdmin) {
+        showNotification('❌ دسترسی فقط برای ادمین!', 'error');
+        return;
+    }
+    
+    adminPanel.classList.toggle('open');
+    if (adminPanel.classList.contains('open')) {
+        await loadAdminPanel();
+    }
+});
+
+closeAdmin.addEventListener('click', () => {
+    adminPanel.classList.remove('open');
+});
+
+async function loadAdminPanel() {
+    try {
+        const token = getToken();
+        const response = await fetch(`/api/admin/users?token=${token}`);
+        const data = await response.json();
+        
+        if (response.ok) {
+            totalUsers.textContent = Object.keys(data).length;
+            totalGroups.textContent = Object.keys(allGroups).length;
+            
+            usersListContainer.innerHTML = '';
+            Object.keys(data).forEach(username => {
+                const user = data[username];
+                const isSpecial = user.isSpecial || false;
+                
+                const userItem = document.createElement('div');
+                userItem.className = 'admin-user-item';
+                userItem.innerHTML = `
+                    <div class="user-info">
+                        <div class="avatar">${user.nickname ? user.nickname[0].toUpperCase() : username[0].toUpperCase()}</div>
+                        <div>
+                            <div class="username">${user.nickname || username} ${isSpecial ? '👑' : ''}</div>
+                            <div class="nickname">@${username}</div>
+                        </div>
+                    </div>
+                    <div class="user-actions">
+                        <button class="edit-btn" onclick="editUser('${username}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        ${username !== 'MALEK' ? `<button class="delete-btn" onclick="deleteUser('${username}')">
+                            <i class="fas fa-trash"></i>
+                        </button>` : ''}
+                    </div>
+                `;
+                usersListContainer.appendChild(userItem);
+            });
+        }
+    } catch (error) {
+        showNotification('خطا در بارگذاری پنل مدیریت', 'error');
+    }
+}
+
+window.editUser = function(username) {
+    const user = allUsers[username];
+    if (!user) return;
+    
+    const newNickname = prompt('نام نمایشی جدید:', user.nickname);
+    if (newNickname !== null && newNickname.trim()) {
+        fetch('/api/admin/edit-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                token: getToken(),
+                targetUsername: username,
+                updates: { nickname: newNickname.trim() }
+            })
+        }).then(res => res.json())
+          .then(data => {
+              if (data.success) {
+                  showNotification('✅ کاربر به‌روزرسانی شد!');
+                  loadAdminPanel();
+                  // به‌روزرسانی لیست چت‌ها
+                  allUsers[username].nickname = newNickname.trim();
+                  updateChatList();
+              }
+          });
+    }
+};
+
+window.deleteUser = function(username) {
+    if (!confirm(`آیا از حذف کاربر ${username} مطمئن هستید؟`)) return;
+    
+    fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            token: getToken(),
+            targetUsername: username
+        })
+    }).then(res => res.json())
+      .then(data => {
+          if (data.success) {
+              showNotification('✅ کاربر حذف شد!');
+              delete allUsers[username];
+              loadAdminPanel();
+              updateChatList();
+          }
+      });
+};
 
 // ===== خروج =====
 
@@ -756,9 +918,8 @@ newGroupBtn.addEventListener('click', async () => {
     if (!groupName || !groupName.trim()) return;
     
     const membersInput = prompt('👥 نام کاربران (با کاما جدا کنید):');
-    const members = membersInput ? membersInput.split(',').map(m => m.trim()).filter(m => m) : [];
+    const members = membersInput ? membersInput.split(',').map(m => m.trim()).filter(m => m && allUsers[m]) : [];
     
-    // اضافه کردن خود کاربر
     if (!members.includes(currentUser.username)) {
         members.unshift(currentUser.username);
     }
@@ -814,8 +975,13 @@ async function autoLogin() {
         
         if (data.success) {
             currentUser = data.user;
+            isAdmin = data.user.isAdmin || false;
             socket.emit('authenticate', { token });
-            showNotification(`🔄 خوش آمدید ${currentUser.nickname}!`);
+            if (isAdmin) {
+                showNotification('👑 خوش آمدید مدیر عزیز!');
+            } else {
+                showNotification(`🔄 خوش آمدید ${currentUser.nickname}!`);
+            }
         } else {
             clearToken();
         }
@@ -843,7 +1009,8 @@ document.head.appendChild(style);
 
 // ===== شروع =====
 
-console.log('🖤💛 PYS Messenger v3.0 - Final Version');
+console.log('🖤💛 PYS Messenger v4.0 - Final Version');
+console.log('👑 Special Account: MALEK');
 console.log('👤 Designed by S A D R A');
 
 socket.on('connect', () => {
@@ -856,7 +1023,7 @@ socket.on('disconnect', () => {
     showNotification('⚠️ اتصال به سرور قطع شد!', 'error');
 });
 
-// ===== اضافه کردن تابع رفرش =====
+// ===== تابع رفرش =====
 window.refreshChat = function() {
     if (currentChat) {
         loadMessages(currentChat);
@@ -864,3 +1031,4 @@ window.refreshChat = function() {
     }
 };
 console.log('💡 برای رفرش پیام‌ها: refreshChat()');
+console.log('👑 اکانت ویژه: MALEK / MALEK11NEYMAR');
