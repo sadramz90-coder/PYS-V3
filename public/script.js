@@ -5,11 +5,11 @@ let currentChat = null;
 let chatHistory = {};
 let allUsers = {};
 let allGroups = {};
-let onlineUsers = [];
+let onlineUsersList = [];
 let token = null;
 let isAdmin = false;
 
-// ========== DOM ==========
+// ========== DOM Elements ==========
 const authPage = document.getElementById('authPage');
 const mainPage = document.getElementById('mainPage');
 const loginUsername = document.getElementById('loginUsername');
@@ -48,13 +48,34 @@ const totalUsers = document.getElementById('totalUsers');
 const totalGroups = document.getElementById('totalGroups');
 const specialBadge = document.getElementById('specialBadge');
 
+// ========== Utilities ==========
 function notif(msg, type = 'info') {
     const d = document.createElement('div');
     d.className = 'notification';
     d.textContent = msg;
-    d.style.cssText = `position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:${type==='error'?'#ff4444':'#1a1a1a'};border:1px solid ${type==='error'?'#ff4444':'rgba(255,215,0,0.2)'};border-radius:15px;padding:15px 30px;color:#fff;z-index:99999;font-family:'Vazirmatn',sans-serif;box-shadow:0 10px 40px rgba(0,0,0,0.5);max-width:90%;text-align:center;`;
+    d.style.cssText = `
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: ${type === 'error' ? '#ff4444' : '#1a1a1a'};
+        border: 1px solid ${type === 'error' ? '#ff4444' : 'rgba(255,215,0,0.2)'};
+        border-radius: 15px;
+        padding: 15px 30px;
+        color: #fff;
+        z-index: 99999;
+        font-family: 'Vazirmatn', sans-serif;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        max-width: 90%;
+        text-align: center;
+        animation: slideUp 0.3s ease;
+    `;
     document.body.appendChild(d);
-    setTimeout(() => { d.style.opacity = '0'; setTimeout(() => d.remove(), 300); }, 3000);
+    setTimeout(() => {
+        d.style.opacity = '0';
+        d.style.transition = 'opacity 0.3s';
+        setTimeout(() => d.remove(), 300);
+    }, 3000);
 }
 
 function saveToken(t) { token = t; localStorage.setItem('pys_token', t); }
@@ -72,11 +93,14 @@ document.querySelectorAll('.auth-tab').forEach(tab => {
 });
 
 registerBtn.addEventListener('click', async () => {
-    const u = registerUsername.value.trim(), n = registerNickname.value.trim(), p = registerPassword.value, c = registerConfirm.value;
-    if (!u || !p) return notif('لطفاً فیلدها رو پر کن', 'error');
+    const u = registerUsername.value.trim();
+    const n = registerNickname.value.trim();
+    const p = registerPassword.value;
+    const c = registerConfirm.value;
+    if (!u || !p) return notif('لطفاً فیلدها را پر کنید', 'error');
     if (u.length < 3) return notif('نام کاربری حداقل ۳ کاراکتر', 'error');
-    if (p.length < 4) return notif('رمز حداقل ۴ کاراکتر', 'error');
-    if (p !== c) return notif('رمزها یکی نیستن', 'error');
+    if (p.length < 4) return notif('رمز عبور حداقل ۴ کاراکتر', 'error');
+    if (p !== c) return notif('رمز عبور و تکرار آن مطابقت ندارند', 'error');
     registerBtn.disabled = true;
     registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     const res = await fetch('/api/register', {
@@ -88,15 +112,19 @@ registerBtn.addEventListener('click', async () => {
     registerBtn.disabled = false;
     registerBtn.innerHTML = '<i class="fas fa-user-plus"></i> ثبت نام';
     if (data.success) {
-        notif('✅ ثبت نام شد، حالا وارد شو');
+        notif('✅ ثبت نام با موفقیت انجام شد! حالا وارد شوید.');
         document.querySelector('[data-tab="login"]').click();
         loginUsername.value = u;
-    } else notif(data.error || 'خطا', 'error');
+        loginPassword.value = '';
+    } else {
+        notif(data.error || 'خطا در ثبت نام', 'error');
+    }
 });
 
 loginBtn.addEventListener('click', async () => {
-    const u = loginUsername.value.trim(), p = loginPassword.value;
-    if (!u || !p) return notif('نام و رمز رو وارد کن', 'error');
+    const u = loginUsername.value.trim();
+    const p = loginPassword.value;
+    if (!u || !p) return notif('نام کاربری و رمز عبور را وارد کنید', 'error');
     loginBtn.disabled = true;
     loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     const res = await fetch('/api/login', {
@@ -106,19 +134,21 @@ loginBtn.addEventListener('click', async () => {
     });
     const data = await res.json();
     loginBtn.disabled = false;
-    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود';
+    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به PYS';
     if (data.success) {
         saveToken(data.token);
         currentUser = data.user;
         isAdmin = data.user.isAdmin || false;
         socket.emit('authenticate', { token: data.token });
-    } else notif(data.error || 'خطا', 'error');
+    } else {
+        notif(data.error || 'خطا در ورود', 'error');
+    }
 });
 
 loginPassword.addEventListener('keypress', e => { if (e.key === 'Enter') loginBtn.click(); });
 registerConfirm.addEventListener('keypress', e => { if (e.key === 'Enter') registerBtn.click(); });
 
-// ========== Socket ==========
+// ========== Socket Events ==========
 socket.on('authenticated', (data) => {
     currentUser = data.user;
     allUsers = data.users;
@@ -131,34 +161,42 @@ socket.on('authenticated', (data) => {
 
     if (isAdmin) {
         adminPanelBtn.style.display = 'flex';
-        notif('👑 خوش آمدید مدیر عزیز');
+        notif('👑 خوش آمدید مدیر عزیز!');
     }
     updateChatList();
     updateProfile();
-    notif(`خوش آمدید ${currentUser.nickname} 🖤💛`);
+    notif(`به PYS خوش آمدید ${currentUser.nickname}! 🖤💛`);
 });
 
 socket.on('authError', (data) => {
-    notif(data.message || 'خطا', 'error');
+    notif(data.message || 'خطا در احراز هویت', 'error');
     clearToken();
 });
 
-socket.on('error', (data) => notif(data.message || 'خطا', 'error'));
+socket.on('error', (data) => {
+    notif(data.message || 'خطایی رخ داد', 'error');
+});
 
-// ========== Chat ==========
+// ========== Chat Functions ==========
 function updateChatList() {
     chatList.innerHTML = '';
     if (!currentUser) return;
     const contacts = Object.keys(allUsers).filter(u => u !== currentUser.username);
     if (contacts.length === 0 && Object.keys(allGroups).length === 0) {
-        chatList.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-gray);opacity:0.5;"><i class="fas fa-comments" style="font-size:3rem;display:block;margin-bottom:15px;"></i><p>هنوز چتی نیست</p></div>`;
+        chatList.innerHTML = `
+            <div style="text-align:center;padding:40px;color:var(--text-gray);opacity:0.5;">
+                <i class="fas fa-comments" style="font-size:3rem;display:block;margin-bottom:15px;"></i>
+                <p>هنوز چتی وجود ندارد</p>
+                <span style="font-size:0.9rem;">از دکمه + برای شروع استفاده کنید</span>
+            </div>
+        `;
         return;
     }
     contacts.forEach(username => {
         const user = allUsers[username];
         const msgs = chatHistory[username] || [];
         const last = msgs.length ? msgs[msgs.length - 1] : null;
-        const online = onlineUsers.includes(username);
+        const online = onlineUsersList.includes(username);
         const special = user.isSpecial || false;
         const div = document.createElement('div');
         div.className = `chat-item ${currentChat === username ? 'active' : ''}`;
@@ -170,7 +208,10 @@ function updateChatList() {
                 ${special ? '<div class="special-badge-small"><i class="fas fa-crown"></i></div>' : ''}
             </div>
             <div class="chat-info">
-                <div class="chat-name ${special ? 'special-name' : ''}">${user.nickname || username} ${special ? '👑' : ''}</div>
+                <div class="chat-name ${special ? 'special-name' : ''}">
+                    ${user.nickname || username}
+                    ${special ? '👑' : ''}
+                </div>
                 <div class="chat-last-msg">${last ? (last.deleted ? '🗑️ حذف شده' : last.message.substring(0, 30)) : '💬 شروع چت...'}</div>
             </div>
             <div class="chat-time">${last ? new Date(last.timestamp).toLocaleTimeString('fa-IR', {hour:'2-digit',minute:'2-digit'}) : ''}</div>
@@ -188,7 +229,10 @@ function updateChatList() {
             div.dataset.chatId = gid;
             div.innerHTML = `
                 <div class="chat-avatar"><i class="fas fa-users"></i></div>
-                <div class="chat-info"><div class="chat-name">${group.name}</div><div class="chat-last-msg">${last ? last.message : 'گروه خالی'}</div></div>
+                <div class="chat-info">
+                    <div class="chat-name">${group.name}</div>
+                    <div class="chat-last-msg">${last ? last.message : 'گروه خالی'}</div>
+                </div>
             `;
             div.addEventListener('click', () => openChat(gid, 'group'));
             chatList.appendChild(div);
@@ -198,15 +242,17 @@ function updateChatList() {
 
 function openChat(chatId, type) {
     currentChat = chatId;
-    document.querySelectorAll('.chat-item').forEach(el => el.classList.toggle('active', el.dataset.chatId === chatId));
+    document.querySelectorAll('.chat-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.chatId === chatId);
+    });
     if (type === 'private') {
         const user = allUsers[chatId];
         if (!user) return notif('کاربر یافت نشد', 'error');
         chatUsername.textContent = user.nickname || chatId;
         if (user.isSpecial) chatUsername.textContent += ' 👑';
         chatUsername.style.color = user.isSpecial ? 'var(--gold)' : '';
-        chatStatus.textContent = onlineUsers.includes(chatId) ? '🟢 آنلاین' : '⚫ آفلاین';
-        chatStatus.className = `chat-status ${onlineUsers.includes(chatId) ? 'online' : ''}`;
+        chatStatus.textContent = onlineUsersList.includes(chatId) ? '🟢 آنلاین' : '⚫ آفلاین';
+        chatStatus.className = `chat-status ${onlineUsersList.includes(chatId) ? 'online' : ''}`;
         chatAvatar.innerHTML = `<i class="fas fa-user-circle" style="font-size:2.5rem;"></i>`;
         chatAvatar.style.background = user.isSpecial ? 'linear-gradient(135deg, var(--gold), #FF6B00)' : '';
         chatAvatar.style.boxShadow = user.isSpecial ? '0 0 30px rgba(255,215,0,0.3)' : '';
@@ -229,7 +275,13 @@ function loadMessages(chatId) {
     messagesContainer.innerHTML = '';
     const msgs = chatHistory[chatId] || [];
     if (msgs.length === 0) {
-        messagesContainer.innerHTML = `<div class="empty-state"><i class="fas fa-comments"></i><p>هیچ پیامی نیست</p><span>اولین پیام رو بفرست</span></div>`;
+        messagesContainer.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-comments"></i>
+                <p>هیچ پیامی وجود ندارد</p>
+                <span>اولین پیام را ارسال کنید</span>
+            </div>
+        `;
         return;
     }
     msgs.forEach(m => appendMessage(m));
@@ -244,7 +296,7 @@ function appendMessage(msg) {
     div.dataset.msgId = msg.id;
     let content = '';
     if (msg.deleted) {
-        content = `<div class="msg-text" style="opacity:0.4;font-style:italic;">🗑️ حذف شده</div>`;
+        content = `<div class="msg-text" style="opacity:0.4;font-style:italic;">🗑️ این پیام حذف شده است</div>`;
     } else {
         if (!isSent && msg.from) {
             const sender = allUsers[msg.from]?.nickname || msg.from;
@@ -289,13 +341,17 @@ function showMenu(msgId, chatId) {
     menu.style.top = y + 'px';
     setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 100);
 }
+
 window.editMsg = function(id, chatId) {
     const txt = prompt('متن جدید:');
     if (txt && txt.trim()) socket.emit('editMessage', { chatId, messageId: id, newText: txt.trim() });
     document.querySelector('.message-menu')?.remove();
 };
+
 window.deleteMsg = function(id, chatId) {
-    if (confirm('حذف بشه؟')) socket.emit('deleteMessage', { chatId, messageId: id });
+    if (confirm('آیا از حذف این پیام مطمئن هستید؟')) {
+        socket.emit('deleteMessage', { chatId, messageId: id });
+    }
     document.querySelector('.message-menu')?.remove();
 };
 
@@ -304,18 +360,25 @@ function scrollToBottom() {
     if (c) setTimeout(() => c.scrollTop = c.scrollHeight, 100);
 }
 
-// ========== Send ==========
+// ========== Send Message ==========
 sendBtn.addEventListener('click', send);
-messageInput.addEventListener('keypress', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+messageInput.addEventListener('keypress', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+    }
+});
+
 function send() {
     const text = messageInput.value.trim();
-    if (!text) return notif('پیام بنویس', 'error');
-    if (!currentChat) return notif('چت رو انتخاب کن', 'error');
+    if (!text) return notif('لطفاً پیام بنویسید', 'error');
+    if (!currentChat) return notif('لطفاً یک چت انتخاب کنید', 'error');
     socket.emit('sendMessage', { chatId: currentChat, message: text });
     messageInput.value = '';
+    messageInput.focus();
 }
 
-// ========== Socket Events ==========
+// ========== Socket Message Events ==========
 socket.on('newMessage', (msg) => {
     let chatId = msg.to;
     if (msg.to === currentUser.username) chatId = msg.from;
@@ -324,9 +387,15 @@ socket.on('newMessage', (msg) => {
     if (!chatHistory[chatId]) chatHistory[chatId] = [];
     if (!chatHistory[chatId].some(m => m.id === msg.id)) {
         chatHistory[chatId].push(msg);
-        if (currentChat === chatId) { appendMessage(msg); scrollToBottom(); }
+        if (currentChat === chatId) {
+            appendMessage(msg);
+            scrollToBottom();
+        }
         updateChatList();
-        if (msg.from !== currentUser.username) notif(`📩 از ${allUsers[msg.from]?.nickname || msg.from}`);
+        if (msg.from !== currentUser.username) {
+            const sender = allUsers[msg.from]?.nickname || msg.from;
+            notif(`📩 پیام جدید از ${sender}`);
+        }
     }
 });
 
@@ -335,19 +404,71 @@ socket.on('messageEdited', ({ chatId, messageId, newText }) => {
     const msgs = chatHistory[chatId];
     if (!msgs) return;
     const m = msgs.find(x => x.id === messageId);
-    if (m) { m.message = newText; m.edited = true; const el = document.querySelector(`[data-msg-id="${messageId}"]`); if (el) { const t = el.querySelector('.msg-text'); if (t) t.textContent = newText; } }
+    if (m) {
+        m.message = newText;
+        m.edited = true;
+        const el = document.querySelector(`[data-msg-id="${messageId}"]`);
+        if (el) {
+            const t = el.querySelector('.msg-text');
+            if (t) t.textContent = newText;
+        }
+    }
 });
 socket.on('messageDeleted', ({ chatId, messageId }) => {
     const msgs = chatHistory[chatId];
     if (!msgs) return;
     const m = msgs.find(x => x.id === messageId);
-    if (m) { m.deleted = true; m.message = 'حذف شده'; const el = document.querySelector(`[data-msg-id="${messageId}"]`); if (el) { const t = el.querySelector('.msg-text'); if (t) { t.textContent = '🗑️ حذف شده'; t.style.opacity = '0.4'; t.style.fontStyle = 'italic'; } } }
+    if (m) {
+        m.deleted = true;
+        m.message = 'این پیام حذف شده است';
+        const el = document.querySelector(`[data-msg-id="${messageId}"]`);
+        if (el) {
+            const t = el.querySelector('.msg-text');
+            if (t) {
+                t.textContent = '🗑️ این پیام حذف شده است';
+                t.style.opacity = '0.4';
+                t.style.fontStyle = 'italic';
+            }
+        }
+    }
 });
 
-socket.on('userOnline', (data) => { if (!onlineUsers.includes(data.username)) onlineUsers.push(data.username); updateChatList(); if (currentChat === data.username) { chatStatus.textContent = '🟢 آنلاین'; chatStatus.className = 'chat-status online'; } });
-socket.on('userOffline', (data) => { onlineUsers = onlineUsers.filter(u => u !== data.username); updateChatList(); if (currentChat === data.username) { chatStatus.textContent = '⚫ آفلاین'; chatStatus.className = 'chat-status'; } });
-socket.on('onlineList', (list) => { onlineUsers = list; updateChatList(); });
-socket.on('userTyping', (data) => { if (currentChat && data.username !== currentUser.username) { chatStatus.textContent = data.isTyping ? '✏️ در حال تایپ...' : (onlineUsers.includes(data.username) ? '🟢 آنلاین' : '⚫ آفلاین'); } });
+socket.on('userOnline', (data) => {
+    if (!onlineUsersList.includes(data.username)) onlineUsersList.push(data.username);
+    updateChatList();
+    if (currentChat === data.username) {
+        chatStatus.textContent = '🟢 آنلاین';
+        chatStatus.className = 'chat-status online';
+    }
+});
+
+socket.on('userOffline', (data) => {
+    onlineUsersList = onlineUsersList.filter(u => u !== data.username);
+    updateChatList();
+    if (currentChat === data.username) {
+        const time = new Date(data.lastSeen).toLocaleTimeString('fa-IR', {hour:'2-digit',minute:'2-digit'});
+        chatStatus.textContent = `⚫ آخرین بازدید: ${time}`;
+        chatStatus.className = 'chat-status';
+    }
+});
+
+socket.on('onlineList', (list) => {
+    onlineUsersList = list;
+    updateChatList();
+});
+
+socket.on('userTyping', (data) => {
+    if (currentChat && data.username !== currentUser.username) {
+        if (data.isTyping) {
+            chatStatus.textContent = '✏️ در حال تایپ...';
+            chatStatus.className = 'chat-status';
+        } else {
+            const isOnline = onlineUsersList.includes(data.username);
+            chatStatus.textContent = isOnline ? '🟢 آنلاین' : '⚫ آفلاین';
+            chatStatus.className = `chat-status ${isOnline ? 'online' : ''}`;
+        }
+    }
+});
 
 // ========== Profile ==========
 function updateProfile() {
@@ -362,16 +483,42 @@ function updateProfile() {
     document.getElementById('memberSince').textContent = new Date(currentUser.createdAt).toLocaleDateString('fa-IR');
     document.getElementById('lastSeen').textContent = currentUser.status === 'online' ? 'همین الان' : new Date(currentUser.lastSeen).toLocaleString('fa-IR');
 }
-editBioBtn.addEventListener('click', () => { const b = prompt('بیو جدید:', currentUser.bio); if (b && b.trim()) socket.emit('updateBio', { bio: b.trim() }); });
-editNicknameBtn.addEventListener('click', () => { const n = prompt('نام جدید:', currentUser.nickname); if (n && n.trim()) socket.emit('updateNickname', { nickname: n.trim() }); });
-socket.on('bioUpdated', (data) => { currentUser.bio = data.bio; profileBio.textContent = data.bio; notif('✅ بیو به‌روز شد'); });
-socket.on('nicknameUpdated', (data) => { currentUser.nickname = data.nickname; updateProfile(); updateChatList(); notif('✅ نام به‌روز شد'); });
-socket.on('userUpdated', () => { updateProfile(); updateChatList(); });
+
+editBioBtn.addEventListener('click', () => {
+    const b = prompt('بیوگرافی جدید:', currentUser.bio);
+    if (b && b.trim()) socket.emit('updateBio', { bio: b.trim() });
+});
+
+editNicknameBtn.addEventListener('click', () => {
+    const n = prompt('نام نمایشی جدید:', currentUser.nickname);
+    if (n && n.trim()) socket.emit('updateNickname', { nickname: n.trim() });
+});
+
+socket.on('bioUpdated', (data) => {
+    currentUser.bio = data.bio;
+    profileBio.textContent = data.bio;
+    notif('✅ بیوگرافی به‌روزرسانی شد! ✨');
+});
+
+socket.on('nicknameUpdated', (data) => {
+    currentUser.nickname = data.nickname;
+    updateProfile();
+    updateChatList();
+    notif('✅ نام نمایشی به‌روزرسانی شد! ✨');
+});
+
+socket.on('userUpdated', () => {
+    updateProfile();
+    updateChatList();
+});
 
 // ========== Admin Panel ==========
 adminPanelBtn.addEventListener('click', async () => {
-    if (!isAdmin) return notif('❌ فقط ادمین', 'error');
-    if (adminPanel.classList.contains('open')) { adminPanel.classList.remove('open'); return; }
+    if (!isAdmin) return notif('❌ دسترسی فقط برای ادمین', 'error');
+    if (adminPanel.classList.contains('open')) {
+        adminPanel.classList.remove('open');
+        return;
+    }
     adminPanel.classList.add('open');
     const token = getToken();
     const res = await fetch(`/api/admin/users?token=${token}`);
@@ -387,7 +534,10 @@ adminPanelBtn.addEventListener('click', async () => {
             div.innerHTML = `
                 <div class="user-info">
                     <div class="avatar">${user.nickname ? user.nickname[0].toUpperCase() : u[0].toUpperCase()}</div>
-                    <div><div class="username">${user.nickname || u} ${user.isSpecial ? '👑' : ''}</div><div class="nickname">@${u}</div></div>
+                    <div>
+                        <div class="username">${user.nickname || u} ${user.isSpecial ? '👑' : ''}</div>
+                        <div class="nickname">@${u}</div>
+                    </div>
                 </div>
                 <div class="user-actions">
                     <button class="edit-btn" onclick="adminEdit('${u}')"><i class="fas fa-edit"></i></button>
@@ -398,45 +548,88 @@ adminPanelBtn.addEventListener('click', async () => {
         });
     }
 });
+
 closeAdmin.addEventListener('click', () => adminPanel.classList.remove('open'));
+
 window.adminEdit = function(u) {
-    const nick = prompt('نام جدید:', allUsers[u]?.nickname);
+    const nick = prompt('نام نمایشی جدید:', allUsers[u]?.nickname);
     if (nick && nick.trim()) {
         fetch('/api/admin/edit-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: getToken(), targetUsername: u, updates: { nickname: nick.trim() } })
-        }).then(res => res.json()).then(data => { if (data.success) { allUsers[u].nickname = nick.trim(); updateChatList(); adminPanelBtn.click(); notif('✅ به‌روز شد'); } });
+            body: JSON.stringify({
+                token: getToken(),
+                targetUsername: u,
+                updates: { nickname: nick.trim() }
+            })
+        }).then(res => res.json())
+          .then(data => {
+              if (data.success) {
+                  allUsers[u].nickname = nick.trim();
+                  updateChatList();
+                  adminPanelBtn.click();
+                  notif('✅ کاربر به‌روزرسانی شد!');
+              }
+          });
     }
 };
+
 window.adminDelete = function(u) {
-    if (!confirm(`حذف ${u}؟`)) return;
+    if (!confirm(`آیا از حذف کاربر ${u} مطمئن هستید؟`)) return;
     fetch('/api/admin/delete-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: getToken(), targetUsername: u })
-    }).then(res => res.json()).then(data => { if (data.success) { delete allUsers[u]; updateChatList(); adminPanelBtn.click(); notif('✅ حذف شد'); } });
+        body: JSON.stringify({
+            token: getToken(),
+            targetUsername: u
+        })
+    }).then(res => res.json())
+      .then(data => {
+          if (data.success) {
+              delete allUsers[u];
+              updateChatList();
+              adminPanelBtn.click();
+              notif('✅ کاربر حذف شد!');
+          }
+      });
 };
 
-// ========== Other ==========
-logoutBtn.addEventListener('click', () => { if (confirm('خارج میشی؟')) { socket.emit('logout'); clearToken(); setTimeout(() => location.reload(), 500); } });
-settingsBtn.addEventListener('click', () => { profileSidebar.classList.toggle('open'); updateProfile(); });
-closeProfile.addEventListener('click', () => profileSidebar.classList.remove('open'));
-searchChat.addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase().trim();
-    document.querySelectorAll('.chat-item').forEach(el => { const name = el.querySelector('.chat-name')?.textContent?.toLowerCase() || ''; el.style.display = name.includes(q) ? 'flex' : 'none'; });
-});
-newChatBtn.addEventListener('click', () => {
-    const u = prompt('نام کاربری:');
-    if (u && u.trim() && u.trim() !== currentUser.username) {
-        if (allUsers[u.trim()]) openChat(u.trim(), 'private');
-        else notif('کاربر یافت نشد', 'error');
+// ========== Other Functions ==========
+logoutBtn.addEventListener('click', () => {
+    if (confirm('آیا از خروج مطمئن هستید؟')) {
+        socket.emit('logout');
+        clearToken();
+        setTimeout(() => location.reload(), 500);
     }
 });
+
+settingsBtn.addEventListener('click', () => {
+    profileSidebar.classList.toggle('open');
+    updateProfile();
+});
+
+closeProfile.addEventListener('click', () => profileSidebar.classList.remove('open'));
+
+searchChat.addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase().trim();
+    document.querySelectorAll('.chat-item').forEach(el => {
+        const name = el.querySelector('.chat-name')?.textContent?.toLowerCase() || '';
+        el.style.display = name.includes(q) ? 'flex' : 'none';
+    });
+});
+
+newChatBtn.addEventListener('click', () => {
+    const u = prompt('👤 نام کاربری مخاطب:');
+    if (u && u.trim() && u.trim() !== currentUser.username) {
+        if (allUsers[u.trim()]) openChat(u.trim(), 'private');
+        else notif('❌ کاربر مورد نظر یافت نشد', 'error');
+    }
+});
+
 newGroupBtn.addEventListener('click', async () => {
-    const name = prompt('نام گروه:');
+    const name = prompt('📝 نام گروه:');
     if (!name || !name.trim()) return;
-    const membersInput = prompt('اعضا (با کاما):');
+    const membersInput = prompt('👥 نام کاربران (با کاما جدا کنید):');
     const members = membersInput ? membersInput.split(',').map(m => m.trim()).filter(m => m && allUsers[m]) : [];
     if (!members.includes(currentUser.username)) members.unshift(currentUser.username);
     const res = await fetch('/api/groups/create', {
@@ -445,10 +638,17 @@ newGroupBtn.addEventListener('click', async () => {
         body: JSON.stringify({ name: name.trim(), creator: currentUser.username, members })
     });
     const data = await res.json();
-    if (data.success) { allGroups[data.group.id] = data.group; updateChatList(); openChat(data.group.id, 'group'); notif('✅ گروه ساخته شد'); }
+    if (data.success) {
+        allGroups[data.group.id] = data.group;
+        updateChatList();
+        openChat(data.group.id, 'group');
+        notif('✅ گروه با موفقیت ایجاد شد!');
+    }
 });
 
-messageInput.addEventListener('input', () => { if (currentChat) socket.emit('typing', { chatId: currentChat }); });
+messageInput.addEventListener('input', () => {
+    if (currentChat) socket.emit('typing', { chatId: currentChat });
+});
 
 // ========== Auto Login ==========
 async function autoLogin() {
@@ -465,12 +665,15 @@ async function autoLogin() {
         isAdmin = data.user.isAdmin || false;
         socket.emit('authenticate', { token: t });
         if (isAdmin) adminPanelBtn.style.display = 'flex';
-    } else clearToken();
+    } else {
+        clearToken();
+    }
 }
 
 // ========== Start ==========
 socket.on('connect', autoLogin);
-socket.on('disconnect', () => notif('⚠️ اتصال قطع شد', 'error'));
+socket.on('disconnect', () => notif('⚠️ اتصال به سرور قطع شد!', 'error'));
 
-console.log('🖤💛 PYS v5.0 - نهایی');
-console.log('👑 MALEK / MALEK11NEYMAR');
+console.log('🖤💛 PYS Messenger v6.0 - FINAL');
+console.log('👑 Special Account: MALEK / MALEK11NEYMAR');
+console.log('👤 Designed by S A D R A');
