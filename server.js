@@ -33,6 +33,7 @@ const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 const MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
 const GROUPS_FILE = path.join(DATA_DIR, 'groups.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+const OFFLINE_MESSAGES_FILE = path.join(DATA_DIR, 'offline_messages.json');
 
 // توابع خواندن/نوشتن داده
 function readData(file) {
@@ -60,6 +61,7 @@ let accounts = readData(ACCOUNTS_FILE);
 let messages = readData(MESSAGES_FILE);
 let groups = readData(GROUPS_FILE);
 let sessions = readData(SESSIONS_FILE);
+let offlineMessages = readData(OFFLINE_MESSAGES_FILE);
 
 // کاربران آنلاین
 let onlineUsers = new Map();
@@ -233,7 +235,7 @@ app.post('/api/verify', async (req, res) => {
     }
 });
 
-// دریافت لیست کاربران (با فیلتر برای حریم خصوصی)
+// دریافت لیست کاربران
 app.get('/api/users/:username', (req, res) => {
     try {
         const currentUsername = req.params.username;
@@ -241,7 +243,6 @@ app.get('/api/users/:username', (req, res) => {
         
         Object.keys(accounts).forEach(username => {
             const acc = accounts[username];
-            // فقط اطلاعات عمومی را ارسال کن
             userList[username] = {
                 username: acc.username,
                 nickname: acc.nickname,
@@ -260,21 +261,17 @@ app.get('/api/users/:username', (req, res) => {
     }
 });
 
-// دریافت پیام‌های یک چت (فقط برای کاربران مجاز)
+// دریافت پیام‌های یک چت - نمایش کامل برای هر دو طرف
 app.get('/api/messages/:chatId/:username', (req, res) => {
     try {
         const { chatId, username } = req.params;
-        
-        // بررسی دسترسی کاربر به چت
         const msgs = messages[chatId] || [];
         
-        // فیلتر پیام‌ها: فقط پیام‌هایی که کاربر در آنها نقش دارد
-        const filteredMsgs = msgs.filter(msg => 
-            msg.from === username || msg.to === username
-        );
-        
-        res.json(filteredMsgs);
+        // نمایش همه پیام‌های این چت (هم ارسال و هم دریافت)
+        // چون این چت بین دو کاربر است، هر دو باید همه پیام‌ها را ببینند
+        res.json(msgs);
     } catch (error) {
+        console.error('Error getting messages:', error);
         res.status(500).json({ error: 'خطا در دریافت پیام‌ها' });
     }
 });
@@ -452,12 +449,22 @@ io.on('connection', (socket) => {
             accounts[username].lastSeen = new Date().toISOString();
             writeData(ACCOUNTS_FILE, accounts);
             
-            // ارسال اطلاعات کامل (فقط پیام‌های مربوط به کاربر)
+            // *** ارسال پیام‌های آفلاین ذخیره شده ***
+            if (offlineMessages[username] && offlineMessages[username].length > 0) {
+                console.log(`📨 ارسال ${offlineMessages[username].length} پیام آفلاین به ${username}`);
+                offlineMessages[username].forEach(msg => {
+                    socket.emit('newMessage', msg);
+                });
+                // پاک کردن پیام‌های آفلاین
+                delete offlineMessages[username];
+                writeData(OFFLINE_MESSAGES_FILE, offlineMessages);
+            }
+            
+            // ارسال اطلاعات کامل - نمایش همه پیام‌های چت
             const userMessages = {};
             Object.keys(messages).forEach(chatId => {
-                userMessages[chatId] = messages[chatId].filter(msg => 
-                    msg.from === username || msg.to === username
-                );
+                // نمایش همه پیام‌های این چت (هم ارسال و هم دریافت)
+                userMessages[chatId] = messages[chatId] || [];
             });
             
             socket.emit('authenticated', {
@@ -532,16 +539,29 @@ io.on('connection', (socket) => {
             }
             writeData(MESSAGES_FILE, messages);
             
+            // بررسی آنلاین بودن کاربر مقابل
+            const targetUser = chatId.startsWith('group_') ? null : chatId;
+            
+            if (targetUser && !onlineUsers.has(targetUser)) {
+                // کاربر آفلاین است - ذخیره پیام برای ارسال بعدی
+                if (!offlineMessages[targetUser]) {
+                    offlineMessages[targetUser] = [];
+                }
+                offlineMessages[targetUser].push(msg);
+                writeData(OFFLINE_MESSAGES_FILE, offlineMessages);
+                console.log(`💾 پیام برای ${targetUser} (آفلاین) ذخیره شد`);
+            }
+            
             // ارسال به همه در اتاق
             io.to(chatId).emit('newMessage', msg);
             
             // ارسال مستقیم به کاربر مقابل (برای چت خصوصی)
-            if (!chatId.startsWith('group_')) {
-                const targetSocketId = onlineUsers.get(chatId);
+            if (targetUser) {
+                const targetSocketId = onlineUsers.get(targetUser);
                 if (targetSocketId) {
                     io.to(targetSocketId).emit('newMessage', msg);
+                    console.log(`📨 پیام به ${targetUser} (آنلاین) ارسال شد`);
                 }
-                // اگر کاربر آفلاین است، پیام در سرور ذخیره شده و بعداً دیده می‌شود
             }
             
             socket.emit('messageSent', { 
@@ -715,12 +735,13 @@ io.on('connection', (socket) => {
 // ============ Server Start ============
 
 server.listen(PORT, () => {
-    console.log('╔═══════════════════════════════════════════╗');
-    console.log('║   🚀 PYS Messenger v4.0                 ║');
-    console.log('║   👤 Designed by S A D R A 🖤💛         ║');
-    console.log('║   📍 Port: ' + PORT + '                            ║');
-    console.log('║   📊 Users: ' + Object.keys(accounts).length + '                            ║');
-    console.log('║   💬 Groups: ' + Object.keys(groups).length + '                            ║');
-    console.log('║   👑 Special Account: MALEK             ║');
-    console.log('╚═══════════════════════════════════════════╝');
+    console.log('╔════════════════════════════════════════════╗');
+    console.log('║   🚀 PYS Messenger v5.0                  ║');
+    console.log('║   👤 Designed by S A D R A 🖤💛          ║');
+    console.log('║   📍 Port: ' + PORT + '                             ║');
+    console.log('║   📊 Users: ' + Object.keys(accounts).length + '                             ║');
+    console.log('║   💬 Groups: ' + Object.keys(groups).length + '                             ║');
+    console.log('║   👑 Special Account: MALEK              ║');
+    console.log('║   💾 Offline Messages: Enabled           ║');
+    console.log('╚════════════════════════════════════════════╝');
 });
