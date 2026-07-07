@@ -1,5 +1,5 @@
 // ============================================
-// PYS Messenger v4.0 - Client Side
+// PYS Messenger v5.0 - Client Side
 // Designed by S A D R A 🖤💛
 // ============================================
 
@@ -73,6 +73,23 @@ function showNotification(message, type = 'info') {
     const notif = document.createElement('div');
     notif.className = `notification ${type}`;
     notif.textContent = message;
+    notif.style.cssText = `
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: ${type === 'error' ? '#ff4444' : '#1a1a1a'};
+        border: 1px solid ${type === 'error' ? '#ff4444' : 'rgba(255,215,0,0.2)'};
+        border-radius: 15px;
+        padding: 15px 30px;
+        color: white;
+        z-index: 10000;
+        font-family: 'Vazirmatn', sans-serif;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        animation: slideUp 0.3s ease;
+        max-width: 90%;
+        text-align: center;
+    `;
     document.body.appendChild(notif);
     setTimeout(() => {
         notif.style.opacity = '0';
@@ -448,7 +465,7 @@ function appendMessage(msg) {
                 content += `<div class="msg-reply">${repliedMsg.message}</div>`;
             }
         }
-        // نمایش نام فرستنده برای پیام‌های دریافتی (غیر از خود کاربر)
+        // نمایش نام فرستنده برای پیام‌های دریافتی
         if (!isSent && msg.from) {
             const sender = allUsers[msg.from]?.nickname || msg.from;
             content += `<div style="font-size:0.7rem;color:var(--gold);margin-bottom:4px;">${sender} ${isSpecial ? '👑' : ''}</div>`;
@@ -759,10 +776,13 @@ adminPanelBtn.addEventListener('click', async () => {
         return;
     }
     
-    adminPanel.classList.toggle('open');
     if (adminPanel.classList.contains('open')) {
-        await loadAdminPanel();
+        adminPanel.classList.remove('open');
+        return;
     }
+    
+    adminPanel.classList.add('open');
+    await loadAdminPanel();
 });
 
 closeAdmin.addEventListener('click', () => {
@@ -830,7 +850,6 @@ window.editUser = function(username) {
               if (data.success) {
                   showNotification('✅ کاربر به‌روزرسانی شد!');
                   loadAdminPanel();
-                  // به‌روزرسانی لیست چت‌ها
                   allUsers[username].nickname = newNickname.trim();
                   updateChatList();
               }
@@ -978,6 +997,7 @@ async function autoLogin() {
             isAdmin = data.user.isAdmin || false;
             socket.emit('authenticate', { token });
             if (isAdmin) {
+                adminPanelBtn.style.display = 'flex';
                 showNotification('👑 خوش آمدید مدیر عزیز!');
             } else {
                 showNotification(`🔄 خوش آمدید ${currentUser.nickname}!`);
@@ -1009,7 +1029,7 @@ document.head.appendChild(style);
 
 // ===== شروع =====
 
-console.log('🖤💛 PYS Messenger v4.0 - Final Version');
+console.log('🖤💛 PYS Messenger v5.0 - Final Version');
 console.log('👑 Special Account: MALEK');
 console.log('👤 Designed by S A D R A');
 
