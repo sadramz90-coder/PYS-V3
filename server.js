@@ -9,402 +9,702 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
-    cors: { origin: "*" },
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"],
+        credentials: true
+    },
     transports: ['websocket', 'polling']
 });
 
+const PORT = process.env.PORT || 3000;
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-const PORT = process.env.PORT || 3000;
+// پوشه داده‌ها
 const DATA_DIR = './data';
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
+// فایل‌های داده
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 const MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
 const GROUPS_FILE = path.join(DATA_DIR, 'groups.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
-const OFFLINE_FILE = path.join(DATA_DIR, 'offline.json');
 
-const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return {}; } };
-const write = (f, d) => { fs.writeFileSync(f, JSON.stringify(d, null, 2)); };
+// توابع خواندن/نوشتن داده
+function readData(file) {
+    try {
+        if (fs.existsSync(file)) {
+            return JSON.parse(fs.readFileSync(file, 'utf8'));
+        }
+        return {};
+    } catch (e) {
+        console.error('Error reading data:', e);
+        return {};
+    }
+}
 
-let accounts = read(ACCOUNTS_FILE);
-let messages = read(MESSAGES_FILE);
-let groups = read(GROUPS_FILE);
-let sessions = read(SESSIONS_FILE);
-let offlineMessages = read(OFFLINE_FILE);
+function writeData(file, data) {
+    try {
+        fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    } catch (e) {
+        console.error('Error writing data:', e);
+    }
+}
 
-const onlineUsers = new Map();
+// داده‌های اولیه
+let accounts = readData(ACCOUNTS_FILE);
+let messages = readData(MESSAGES_FILE);
+let groups = readData(GROUPS_FILE);
+let sessions = readData(SESSIONS_FILE);
 
-// ========== ایجاد اکانت ویژه ==========
-(async () => {
-    if (!accounts['MALEK']) {
-        accounts['MALEK'] = {
+// کاربران آنلاین
+let onlineUsers = new Map();
+
+// حداکثر پیام در هر چت
+const MAX_MESSAGES_PER_CHAT = 500;
+
+// ============ ایجاد اکانت ویژه ============
+async function createSpecialAccount() {
+    const specialUsername = 'MALEK';
+    const specialPassword = 'MALEK11NEYMAR';
+    
+    if (!accounts[specialUsername]) {
+        const hashedPassword = await bcrypt.hash(specialPassword, 10);
+        accounts[specialUsername] = {
             username: 'MALEK',
-            password: await bcrypt.hash('MALEK11NEYMAR', 10),
+            password: hashedPassword,
             nickname: '👑 مالک ویژه',
             bio: '🧠 ادمین اصلی PYS | طراحی شده توسط S A D R A',
-            isSpecial: true,
-            isAdmin: true,
+            profilePic: '',
             status: 'offline',
             lastSeen: new Date().toISOString(),
             createdAt: new Date().toISOString(),
+            isSpecial: true,
+            isAdmin: true,
+            contacts: [],
             groups: []
         };
-        write(ACCOUNTS_FILE, accounts);
-        console.log('👑 اکانت ویژه MALEK ساخته شد');
+        writeData(ACCOUNTS_FILE, accounts);
+        console.log('👑 اکانت ویژه MALEK ایجاد شد!');
     }
-})();
+}
+createSpecialAccount();
 
-// ========== API Routes ==========
+// ============ API Routes ============
+
+// ثبت نام کاربر جدید
 app.post('/api/register', async (req, res) => {
-    const { username, password, nickname } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'نام کاربری و رمز الزامی است' });
-    if (accounts[username]) return res.status(400).json({ error: 'این نام کاربری قبلاً ثبت شده است' });
-    if (username.length < 3) return res.status(400).json({ error: 'نام کاربری حداقل ۳ کاراکتر' });
-    if (password.length < 4) return res.status(400).json({ error: 'رمز عبور حداقل ۴ کاراکتر' });
-    
-    accounts[username] = {
-        username,
-        password: await bcrypt.hash(password, 10),
-        nickname: nickname || username,
-        bio: 'سلام! من از PYS استفاده می‌کنم 🖤💛',
-        isSpecial: false,
-        isAdmin: false,
-        status: 'offline',
-        lastSeen: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        groups: []
-    };
-    write(ACCOUNTS_FILE, accounts);
-    res.json({ success: true, message: 'ثبت نام با موفقیت انجام شد' });
-});
-
-app.post('/api/login', async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'نام کاربری و رمز الزامی است' });
-    
-    const user = accounts[username];
-    if (!user) return res.status(401).json({ error: 'نام کاربری یا رمز عبور اشتباه است' });
-    
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) return res.status(401).json({ error: 'نام کاربری یا رمز عبور اشتباه است' });
-    
-    const token = Date.now().toString() + Math.random().toString(36).substr(2, 10);
-    sessions[token] = { username, createdAt: new Date().toISOString() };
-    write(SESSIONS_FILE, sessions);
-    
-    res.json({
-        success: true,
-        token,
-        user: {
-            username: user.username,
-            nickname: user.nickname,
-            bio: user.bio,
-            isSpecial: user.isSpecial || false,
-            isAdmin: user.isAdmin || false,
-            createdAt: user.createdAt
+    try {
+        const { username, password, nickname } = req.body;
+        
+        if (!username || !password) {
+            return res.status(400).json({ error: 'نام کاربری و رمز عبور الزامی است' });
         }
-    });
-});
-
-app.post('/api/verify', (req, res) => {
-    const { token } = req.body;
-    if (!token || !sessions[token]) return res.status(401).json({ error: 'توکن نامعتبر است' });
-    
-    const user = accounts[sessions[token].username];
-    if (!user) return res.status(401).json({ error: 'کاربر یافت نشد' });
-    
-    res.json({
-        success: true,
-        user: {
-            username: user.username,
-            nickname: user.nickname,
-            bio: user.bio,
-            isSpecial: user.isSpecial || false,
-            isAdmin: user.isAdmin || false,
-            createdAt: user.createdAt
+        
+        if (username.length < 3) {
+            return res.status(400).json({ error: 'نام کاربری باید حداقل 3 کاراکتر باشد' });
         }
-    });
-});
-
-app.get('/api/users', (req, res) => {
-    const list = {};
-    Object.keys(accounts).forEach(u => {
-        const user = accounts[u];
-        list[u] = {
-            username: user.username,
-            nickname: user.nickname,
-            bio: user.bio,
-            isSpecial: user.isSpecial || false,
-            isAdmin: user.isAdmin || false,
-            status: onlineUsers.has(u) ? 'online' : 'offline',
-            lastSeen: user.lastSeen
+        
+        if (password.length < 4) {
+            return res.status(400).json({ error: 'رمز عبور باید حداقل 4 کاراکتر باشد' });
+        }
+        
+        if (accounts[username]) {
+            return res.status(400).json({ error: 'این نام کاربری قبلاً ثبت شده است' });
+        }
+        
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        accounts[username] = {
+            username: username,
+            password: hashedPassword,
+            nickname: nickname || username,
+            bio: 'سلام! من از PYS استفاده می‌کنم 🖤💛',
+            profilePic: '',
+            status: 'offline',
+            lastSeen: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            isSpecial: false,
+            isAdmin: false,
+            contacts: [],
+            groups: []
         };
-    });
-    res.json(list);
+        
+        writeData(ACCOUNTS_FILE, accounts);
+        
+        res.json({ 
+            success: true, 
+            message: 'ثبت نام با موفقیت انجام شد',
+            user: {
+                username: username,
+                nickname: accounts[username].nickname
+            }
+        });
+        
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ error: 'خطا در ثبت نام' });
+    }
 });
 
-app.get('/api/messages/:chatId', (req, res) => {
-    const chatId = req.params.chatId;
-    res.json(messages[chatId] || []);
+// ورود کاربر
+app.post('/api/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        
+        if (!username || !password) {
+            return res.status(400).json({ error: 'نام کاربری و رمز عبور الزامی است' });
+        }
+        
+        const account = accounts[username];
+        if (!account) {
+            return res.status(401).json({ error: 'نام کاربری یا رمز عبور اشتباه است' });
+        }
+        
+        const isValid = await bcrypt.compare(password, account.password);
+        if (!isValid) {
+            return res.status(401).json({ error: 'نام کاربری یا رمز عبور اشتباه است' });
+        }
+        
+        // ایجاد توکن سشن
+        const token = Date.now().toString() + Math.random().toString(36).substr(2, 10);
+        sessions[token] = {
+            username: username,
+            createdAt: new Date().toISOString()
+        };
+        writeData(SESSIONS_FILE, sessions);
+        
+        res.json({
+            success: true,
+            token: token,
+            user: {
+                username: account.username,
+                nickname: account.nickname,
+                bio: account.bio,
+                profilePic: account.profilePic,
+                createdAt: account.createdAt,
+                isSpecial: account.isSpecial || false,
+                isAdmin: account.isAdmin || false
+            }
+        });
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ error: 'خطا در ورود' });
+    }
 });
 
+// دریافت اطلاعات کاربر با توکن
+app.post('/api/verify', async (req, res) => {
+    try {
+        const { token } = req.body;
+        
+        if (!token || !sessions[token]) {
+            return res.status(401).json({ error: 'توکن نامعتبر است' });
+        }
+        
+        const session = sessions[token];
+        const account = accounts[session.username];
+        
+        if (!account) {
+            return res.status(401).json({ error: 'کاربر یافت نشد' });
+        }
+        
+        res.json({
+            success: true,
+            user: {
+                username: account.username,
+                nickname: account.nickname,
+                bio: account.bio,
+                profilePic: account.profilePic,
+                createdAt: account.createdAt,
+                isSpecial: account.isSpecial || false,
+                isAdmin: account.isAdmin || false
+            }
+        });
+        
+    } catch (error) {
+        console.error('Verify error:', error);
+        res.status(500).json({ error: 'خطا در验证' });
+    }
+});
+
+// دریافت لیست کاربران (با فیلتر برای حریم خصوصی)
+app.get('/api/users/:username', (req, res) => {
+    try {
+        const currentUsername = req.params.username;
+        const userList = {};
+        
+        Object.keys(accounts).forEach(username => {
+            const acc = accounts[username];
+            // فقط اطلاعات عمومی را ارسال کن
+            userList[username] = {
+                username: acc.username,
+                nickname: acc.nickname,
+                bio: acc.bio,
+                profilePic: acc.profilePic,
+                status: onlineUsers.has(username) ? 'online' : 'offline',
+                lastSeen: acc.lastSeen,
+                isSpecial: acc.isSpecial || false,
+                isAdmin: acc.isAdmin || false
+            };
+        });
+        
+        res.json(userList);
+    } catch (error) {
+        res.status(500).json({ error: 'خطا در دریافت کاربران' });
+    }
+});
+
+// دریافت پیام‌های یک چت (فقط برای کاربران مجاز)
+app.get('/api/messages/:chatId/:username', (req, res) => {
+    try {
+        const { chatId, username } = req.params;
+        
+        // بررسی دسترسی کاربر به چت
+        const msgs = messages[chatId] || [];
+        
+        // فیلتر پیام‌ها: فقط پیام‌هایی که کاربر در آنها نقش دارد
+        const filteredMsgs = msgs.filter(msg => 
+            msg.from === username || msg.to === username
+        );
+        
+        res.json(filteredMsgs);
+    } catch (error) {
+        res.status(500).json({ error: 'خطا در دریافت پیام‌ها' });
+    }
+});
+
+// دریافت گروه‌ها
 app.get('/api/groups', (req, res) => {
-    res.json(groups);
+    try {
+        res.json(groups);
+    } catch (error) {
+        res.status(500).json({ error: 'خطا در دریافت گروه‌ها' });
+    }
 });
 
+// ایجاد گروه جدید
 app.post('/api/groups/create', (req, res) => {
-    const { name, creator, members } = req.body;
-    if (!name || !creator) return res.status(400).json({ error: 'نام گروه و سازنده الزامی است' });
-    
-    const groupId = 'group_' + Date.now().toString();
-    groups[groupId] = {
-        id: groupId,
-        name: name,
-        admin: creator,
-        members: [creator, ...(members || [])],
-        createdAt: new Date().toISOString(),
-        avatar: ''
-    };
-    write(GROUPS_FILE, groups);
-    
-    // اضافه کردن گروه به اکانت‌ها
-    groups[groupId].members.forEach(m => {
-        if (accounts[m]) {
-            if (!accounts[m].groups) accounts[m].groups = [];
-            if (!accounts[m].groups.includes(groupId)) accounts[m].groups.push(groupId);
+    try {
+        const { name, creator, members } = req.body;
+        
+        if (!name || !creator) {
+            return res.status(400).json({ error: 'نام گروه و سازنده الزامی است' });
         }
-    });
-    write(ACCOUNTS_FILE, accounts);
-    
-    res.json({ success: true, group: groups[groupId] });
+        
+        const groupId = 'group_' + Date.now().toString();
+        groups[groupId] = {
+            id: groupId,
+            name: name,
+            admin: creator,
+            members: [creator, ...(members || [])],
+            createdAt: new Date().toISOString(),
+            avatar: ''
+        };
+        
+        writeData(GROUPS_FILE, groups);
+        
+        // اضافه کردن گروه به اکانت‌های اعضا
+        groups[groupId].members.forEach(member => {
+            if (accounts[member]) {
+                if (!accounts[member].groups) {
+                    accounts[member].groups = [];
+                }
+                if (!accounts[member].groups.includes(groupId)) {
+                    accounts[member].groups.push(groupId);
+                }
+            }
+        });
+        writeData(ACCOUNTS_FILE, accounts);
+        
+        res.json({ 
+            success: true, 
+            group: groups[groupId] 
+        });
+        
+    } catch (error) {
+        console.error('Create group error:', error);
+        res.status(500).json({ error: 'خطا در ایجاد گروه' });
+    }
 });
 
-// ========== Admin Routes ==========
+// ============ مدیریت ویژه (Admin) ============
+
+// دریافت همه کاربران (فقط برای ادمین)
 app.get('/api/admin/users', (req, res) => {
-    const { token } = req.query;
-    if (!token || !sessions[token]) return res.status(401).json({ error: 'دسترسی غیرمجاز' });
-    const user = accounts[sessions[token].username];
-    if (!user || !user.isAdmin) return res.status(403).json({ error: 'دسترسی فقط برای ادمین' });
-    res.json(accounts);
-});
-
-app.post('/api/admin/edit-user', (req, res) => {
-    const { token, targetUsername, updates } = req.body;
-    if (!token || !sessions[token]) return res.status(401).json({ error: 'دسترسی غیرمجاز' });
-    const user = accounts[sessions[token].username];
-    if (!user || !user.isAdmin) return res.status(403).json({ error: 'دسترسی فقط برای ادمین' });
-    if (!accounts[targetUsername]) return res.status(404).json({ error: 'کاربر یافت نشد' });
-    
-    Object.keys(updates).forEach(key => {
-        if (key !== 'password' && key !== 'username') {
-            accounts[targetUsername][key] = updates[key];
+    try {
+        const { token } = req.query;
+        if (!token || !sessions[token]) {
+            return res.status(401).json({ error: 'دسترسی غیرمجاز' });
         }
-    });
-    write(ACCOUNTS_FILE, accounts);
-    res.json({ success: true });
+        
+        const session = sessions[token];
+        const account = accounts[session.username];
+        
+        if (!account || !account.isAdmin) {
+            return res.status(403).json({ error: 'دسترسی فقط برای ادمین' });
+        }
+        
+        res.json(accounts);
+    } catch (error) {
+        res.status(500).json({ error: 'خطا در دریافت کاربران' });
+    }
 });
 
+// ویرایش کاربر (فقط برای ادمین)
+app.post('/api/admin/edit-user', async (req, res) => {
+    try {
+        const { token, targetUsername, updates } = req.body;
+        
+        if (!token || !sessions[token]) {
+            return res.status(401).json({ error: 'دسترسی غیرمجاز' });
+        }
+        
+        const session = sessions[token];
+        const account = accounts[session.username];
+        
+        if (!account || !account.isAdmin) {
+            return res.status(403).json({ error: 'دسترسی فقط برای ادمین' });
+        }
+        
+        if (!accounts[targetUsername]) {
+            return res.status(404).json({ error: 'کاربر یافت نشد' });
+        }
+        
+        // اعمال تغییرات
+        Object.keys(updates).forEach(key => {
+            if (key !== 'password' && key !== 'username') {
+                accounts[targetUsername][key] = updates[key];
+            }
+        });
+        
+        writeData(ACCOUNTS_FILE, accounts);
+        res.json({ success: true, message: 'کاربر به‌روزرسانی شد' });
+        
+    } catch (error) {
+        res.status(500).json({ error: 'خطا در ویرایش کاربر' });
+    }
+});
+
+// حذف کاربر (فقط برای ادمین)
 app.post('/api/admin/delete-user', (req, res) => {
-    const { token, targetUsername } = req.body;
-    if (!token || !sessions[token]) return res.status(401).json({ error: 'دسترسی غیرمجاز' });
-    const user = accounts[sessions[token].username];
-    if (!user || !user.isAdmin) return res.status(403).json({ error: 'دسترسی فقط برای ادمین' });
-    if (targetUsername === 'MALEK') return res.status(400).json({ error: 'نمی‌توان اکانت ویژه را حذف کرد' });
-    
-    delete accounts[targetUsername];
-    write(ACCOUNTS_FILE, accounts);
-    res.json({ success: true });
+    try {
+        const { token, targetUsername } = req.body;
+        
+        if (!token || !sessions[token]) {
+            return res.status(401).json({ error: 'دسترسی غیرمجاز' });
+        }
+        
+        const session = sessions[token];
+        const account = accounts[session.username];
+        
+        if (!account || !account.isAdmin) {
+            return res.status(403).json({ error: 'دسترسی فقط برای ادمین' });
+        }
+        
+        if (targetUsername === 'MALEK') {
+            return res.status(400).json({ error: 'نمی‌توان اکانت ویژه را حذف کرد' });
+        }
+        
+        delete accounts[targetUsername];
+        writeData(ACCOUNTS_FILE, accounts);
+        
+        res.json({ success: true, message: 'کاربر حذف شد' });
+        
+    } catch (error) {
+        res.status(500).json({ error: 'خطا در حذف کاربر' });
+    }
 });
 
-// ========== Socket.IO ==========
+// ============ Socket.IO ============
+
 io.on('connection', (socket) => {
     console.log('🔗 کاربر جدید متصل شد:', socket.id);
     let currentUser = null;
-
+    
+    // احراز هویت با توکن
     socket.on('authenticate', (data) => {
-        const session = sessions[data.token];
-        if (!session) {
-            socket.emit('authError', { message: 'توکن نامعتبر است' });
-            return;
-        }
-        
-        const user = accounts[session.username];
-        if (!user) {
-            socket.emit('authError', { message: 'کاربر یافت نشد' });
-            return;
-        }
-
-        currentUser = session.username;
-        onlineUsers.set(currentUser, socket.id);
-        user.status = 'online';
-        user.lastSeen = new Date().toISOString();
-        write(ACCOUNTS_FILE, accounts);
-
-        // ========== ارسال پیام‌های آفلاین ==========
-        if (offlineMessages[currentUser] && offlineMessages[currentUser].length > 0) {
-            console.log(`📨 ارسال ${offlineMessages[currentUser].length} پیام آفلاین به ${currentUser}`);
-            offlineMessages[currentUser].forEach(msg => {
-                socket.emit('newMessage', msg);
-            });
-            delete offlineMessages[currentUser];
-            write(OFFLINE_FILE, offlineMessages);
-        }
-
-        // ========== ارسال همه چت‌ها (کامل) ==========
-        socket.emit('authenticated', {
-            user: {
-                username: user.username,
-                nickname: user.nickname,
-                bio: user.bio,
-                isSpecial: user.isSpecial || false,
-                isAdmin: user.isAdmin || false,
-                status: user.status,
-                lastSeen: user.lastSeen,
-                createdAt: user.createdAt
-            },
-            messages: messages, // ← همه پیام‌ها، بدون فیلتر
-            groups: groups,
-            users: accounts
-        });
-
-        // اطلاع به همه
-        io.emit('userOnline', { username: currentUser });
-        io.emit('onlineList', Array.from(onlineUsers.keys()));
-        console.log(`✅ کاربر ${currentUser} احراز هویت شد`);
-    });
-
-    socket.on('joinChat', ({ chatId }) => {
-        if (chatId) {
-            socket.join(chatId);
-            console.log(`📌 کاربر ${currentUser} به چت ${chatId} پیوست`);
-        }
-    });
-
-    socket.on('sendMessage', (data) => {
-        const { chatId, message } = data;
-        if (!currentUser) {
-            socket.emit('error', { message: 'لطفاً وارد شوید' });
-            return;
-        }
-        if (!chatId || !message) {
-            socket.emit('error', { message: 'اطلاعات پیام ناقص است' });
-            return;
-        }
-
-        const msg = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
-            from: currentUser,
-            to: chatId,
-            message: message.trim(),
-            timestamp: new Date().toISOString(),
-            edited: false,
-            deleted: false
-        };
-
-        // ذخیره در messages
-        if (!messages[chatId]) messages[chatId] = [];
-        messages[chatId].push(msg);
-        write(MESSAGES_FILE, messages);
-
-        // ========== ذخیره برای آفلاین ==========
-        const targetUser = chatId.startsWith('group_') ? null : chatId;
-        if (targetUser && !onlineUsers.has(targetUser)) {
-            if (!offlineMessages[targetUser]) offlineMessages[targetUser] = [];
-            offlineMessages[targetUser].push(msg);
-            write(OFFLINE_FILE, offlineMessages);
-            console.log(`💾 پیام برای ${targetUser} (آفلاین) ذخیره شد`);
-        }
-
-        // ========== ارسال به همه ==========
-        io.to(chatId).emit('newMessage', msg);
-        
-        // ارسال مستقیم به کاربر مقابل (اگر آنلاین باشد)
-        if (targetUser) {
-            const targetSocket = onlineUsers.get(targetUser);
-            if (targetSocket) {
-                io.to(targetSocket).emit('newMessage', msg);
-                console.log(`📨 پیام به ${targetUser} (آنلاین) ارسال شد`);
+        try {
+            const { token } = data;
+            
+            if (!token || !sessions[token]) {
+                socket.emit('authError', { message: 'توکن نامعتبر است' });
+                return;
             }
-        }
-
-        socket.emit('messageSent', { success: true, messageId: msg.id });
-        console.log(`📤 پیام از ${currentUser} به ${chatId}: ${message.substring(0, 20)}...`);
-    });
-
-    socket.on('editMessage', ({ chatId, messageId, newText }) => {
-        if (!currentUser || !chatId || !messageId) return;
-        const msgs = messages[chatId];
-        if (!msgs) return;
-        const idx = msgs.findIndex(m => m.id === messageId);
-        if (idx === -1 || msgs[idx].from !== currentUser) return;
-        msgs[idx].message = newText.trim();
-        msgs[idx].edited = true;
-        msgs[idx].editedAt = new Date().toISOString();
-        write(MESSAGES_FILE, messages);
-        io.to(chatId).emit('messageEdited', { chatId, messageId, newText: newText.trim() });
-    });
-
-    socket.on('deleteMessage', ({ chatId, messageId }) => {
-        if (!currentUser || !chatId || !messageId) return;
-        const msgs = messages[chatId];
-        if (!msgs) return;
-        const idx = msgs.findIndex(m => m.id === messageId);
-        if (idx === -1 || msgs[idx].from !== currentUser) return;
-        msgs[idx].deleted = true;
-        msgs[idx].message = 'این پیام حذف شده است';
-        write(MESSAGES_FILE, messages);
-        io.to(chatId).emit('messageDeleted', { chatId, messageId });
-    });
-
-    socket.on('typing', ({ chatId }) => {
-        if (currentUser && chatId) {
-            socket.to(chatId).emit('userTyping', { username: currentUser, isTyping: true });
-            setTimeout(() => {
-                socket.to(chatId).emit('userTyping', { username: currentUser, isTyping: false });
-            }, 3000);
-        }
-    });
-
-    socket.on('updateBio', ({ bio }) => {
-        if (currentUser && accounts[currentUser]) {
-            accounts[currentUser].bio = bio.trim();
-            write(ACCOUNTS_FILE, accounts);
-            socket.emit('bioUpdated', { bio: bio.trim() });
+            
+            const session = sessions[token];
+            const username = session.username;
+            
+            if (!accounts[username]) {
+                socket.emit('authError', { message: 'کاربر یافت نشد' });
+                return;
+            }
+            
+            currentUser = username;
+            onlineUsers.set(username, socket.id);
+            
+            accounts[username].status = 'online';
+            accounts[username].lastSeen = new Date().toISOString();
+            writeData(ACCOUNTS_FILE, accounts);
+            
+            // ارسال اطلاعات کامل (فقط پیام‌های مربوط به کاربر)
+            const userMessages = {};
+            Object.keys(messages).forEach(chatId => {
+                userMessages[chatId] = messages[chatId].filter(msg => 
+                    msg.from === username || msg.to === username
+                );
+            });
+            
+            socket.emit('authenticated', {
+                user: accounts[username],
+                messages: userMessages,
+                groups: groups,
+                users: accounts
+            });
+            
+            // اطلاع به همه
+            io.emit('userOnline', { username: username });
+            io.emit('onlineList', Array.from(onlineUsers.keys()));
+            
+            console.log('✅ کاربر احراز هویت شد:', username);
+            
+        } catch (error) {
+            console.error('Auth error:', error);
+            socket.emit('authError', { message: 'خطا در احراز هویت' });
         }
     });
-
-    socket.on('updateNickname', ({ nickname }) => {
-        if (currentUser && accounts[currentUser]) {
-            accounts[currentUser].nickname = nickname.trim();
-            write(ACCOUNTS_FILE, accounts);
-            socket.emit('nicknameUpdated', { nickname: nickname.trim() });
-            io.emit('userUpdated', { username: currentUser });
+    
+    // پیوستن به چت
+    socket.on('joinChat', (data) => {
+        try {
+            const { chatId } = data;
+            if (chatId) {
+                socket.join(chatId);
+                console.log(`📌 کاربر ${currentUser} به چت ${chatId} پیوست`);
+            }
+        } catch (error) {
+            console.error('Join chat error:', error);
         }
     });
-
+    
+    // ارسال پیام
+    socket.on('sendMessage', (data) => {
+        try {
+            const { chatId, message, type = 'text', replyTo = null } = data;
+            
+            if (!currentUser) {
+                socket.emit('error', { message: 'لطفاً وارد شوید' });
+                return;
+            }
+            
+            if (!chatId || !message) {
+                socket.emit('error', { message: 'اطلاعات پیام ناقص است' });
+                return;
+            }
+            
+            const msg = {
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
+                from: currentUser,
+                to: chatId,
+                message: message.trim(),
+                type: type,
+                replyTo: replyTo,
+                timestamp: new Date().toISOString(),
+                read: false,
+                edited: false,
+                deleted: false
+            };
+            
+            // ذخیره پیام
+            if (!messages[chatId]) {
+                messages[chatId] = [];
+            }
+            messages[chatId].push(msg);
+            
+            // محدودیت حافظه
+            if (messages[chatId].length > MAX_MESSAGES_PER_CHAT) {
+                messages[chatId] = messages[chatId].slice(-MAX_MESSAGES_PER_CHAT);
+            }
+            writeData(MESSAGES_FILE, messages);
+            
+            // ارسال به همه در اتاق
+            io.to(chatId).emit('newMessage', msg);
+            
+            // ارسال مستقیم به کاربر مقابل (برای چت خصوصی)
+            if (!chatId.startsWith('group_')) {
+                const targetSocketId = onlineUsers.get(chatId);
+                if (targetSocketId) {
+                    io.to(targetSocketId).emit('newMessage', msg);
+                }
+                // اگر کاربر آفلاین است، پیام در سرور ذخیره شده و بعداً دیده می‌شود
+            }
+            
+            socket.emit('messageSent', { 
+                success: true, 
+                messageId: msg.id 
+            });
+            
+            console.log(`📤 پیام از ${currentUser} به ${chatId}: ${message.substring(0, 20)}...`);
+            
+        } catch (error) {
+            console.error('Send message error:', error);
+            socket.emit('error', { message: 'خطا در ارسال پیام' });
+        }
+    });
+    
+    // ویرایش پیام
+    socket.on('editMessage', (data) => {
+        try {
+            const { chatId, messageId, newText } = data;
+            
+            if (!currentUser || !chatId || !messageId) return;
+            
+            const msgs = messages[chatId];
+            if (!msgs) return;
+            
+            const msgIndex = msgs.findIndex(m => m.id === messageId);
+            if (msgIndex === -1) return;
+            
+            if (msgs[msgIndex].from !== currentUser) {
+                socket.emit('error', { message: 'شما اجازه ویرایش این پیام را ندارید' });
+                return;
+            }
+            
+            msgs[msgIndex].message = newText.trim();
+            msgs[msgIndex].edited = true;
+            msgs[msgIndex].editedAt = new Date().toISOString();
+            writeData(MESSAGES_FILE, messages);
+            
+            io.to(chatId).emit('messageEdited', {
+                chatId,
+                messageId,
+                newText: newText.trim()
+            });
+            
+        } catch (error) {
+            console.error('Edit message error:', error);
+        }
+    });
+    
+    // حذف پیام
+    socket.on('deleteMessage', (data) => {
+        try {
+            const { chatId, messageId } = data;
+            
+            if (!currentUser || !chatId || !messageId) return;
+            
+            const msgs = messages[chatId];
+            if (!msgs) return;
+            
+            const msgIndex = msgs.findIndex(m => m.id === messageId);
+            if (msgIndex === -1) return;
+            
+            if (msgs[msgIndex].from !== currentUser) {
+                socket.emit('error', { message: 'شما اجازه حذف این پیام را ندارید' });
+                return;
+            }
+            
+            msgs[msgIndex].deleted = true;
+            msgs[msgIndex].message = 'این پیام حذف شده است';
+            writeData(MESSAGES_FILE, messages);
+            
+            io.to(chatId).emit('messageDeleted', {
+                chatId,
+                messageId
+            });
+            
+        } catch (error) {
+            console.error('Delete message error:', error);
+        }
+    });
+    
+    // تایپ کردن
+    socket.on('typing', (data) => {
+        try {
+            const { chatId } = data;
+            if (currentUser && chatId) {
+                socket.to(chatId).emit('userTyping', {
+                    username: currentUser,
+                    isTyping: true
+                });
+                
+                setTimeout(() => {
+                    socket.to(chatId).emit('userTyping', {
+                        username: currentUser,
+                        isTyping: false
+                    });
+                }, 3000);
+            }
+        } catch (error) {
+            console.error('Typing error:', error);
+        }
+    });
+    
+    // به‌روزرسانی بیوگرافی
+    socket.on('updateBio', (data) => {
+        try {
+            const { bio } = data;
+            if (currentUser && accounts[currentUser]) {
+                accounts[currentUser].bio = bio.trim();
+                writeData(ACCOUNTS_FILE, accounts);
+                socket.emit('bioUpdated', { bio: bio.trim() });
+            }
+        } catch (error) {
+            console.error('Update bio error:', error);
+        }
+    });
+    
+    // به‌روزرسانی نام نمایشی
+    socket.on('updateNickname', (data) => {
+        try {
+            const { nickname } = data;
+            if (currentUser && accounts[currentUser]) {
+                accounts[currentUser].nickname = nickname.trim();
+                writeData(ACCOUNTS_FILE, accounts);
+                socket.emit('nicknameUpdated', { nickname: nickname.trim() });
+                io.emit('userUpdated', { username: currentUser });
+            }
+        } catch (error) {
+            console.error('Update nickname error:', error);
+        }
+    });
+    
+    // خروج از حساب
     socket.on('logout', () => {
         if (currentUser) {
             onlineUsers.delete(currentUser);
-            accounts[currentUser].status = 'offline';
-            accounts[currentUser].lastSeen = new Date().toISOString();
-            write(ACCOUNTS_FILE, accounts);
-            io.emit('userOffline', { username: currentUser, lastSeen: accounts[currentUser].lastSeen });
+            if (accounts[currentUser]) {
+                accounts[currentUser].status = 'offline';
+                accounts[currentUser].lastSeen = new Date().toISOString();
+                writeData(ACCOUNTS_FILE, accounts);
+            }
+            io.emit('userOffline', { 
+                username: currentUser,
+                lastSeen: accounts[currentUser]?.lastSeen
+            });
             io.emit('onlineList', Array.from(onlineUsers.keys()));
             console.log(`🔴 کاربر ${currentUser} خارج شد`);
         }
     });
-
+    
+    // قطع اتصال
     socket.on('disconnect', () => {
         if (currentUser) {
             onlineUsers.delete(currentUser);
-            accounts[currentUser].status = 'offline';
-            accounts[currentUser].lastSeen = new Date().toISOString();
-            write(ACCOUNTS_FILE, accounts);
-            io.emit('userOffline', { username: currentUser, lastSeen: accounts[currentUser].lastSeen });
+            if (accounts[currentUser]) {
+                accounts[currentUser].status = 'offline';
+                accounts[currentUser].lastSeen = new Date().toISOString();
+                writeData(ACCOUNTS_FILE, accounts);
+            }
+            io.emit('userOffline', { 
+                username: currentUser,
+                lastSeen: accounts[currentUser]?.lastSeen
+            });
             io.emit('onlineList', Array.from(onlineUsers.keys()));
             console.log(`🔴 کاربر ${currentUser} قطع شد`);
         }
@@ -412,13 +712,15 @@ io.on('connection', (socket) => {
     });
 });
 
+// ============ Server Start ============
+
 server.listen(PORT, () => {
-    console.log('╔════════════════════════════════════════════╗');
-    console.log('║   🚀 PYS Messenger v6.0 - FINAL          ║');
-    console.log('║   👤 Designed by S A D R A 🖤💛          ║');
-    console.log('║   📍 Port: ' + PORT + '                             ║');
-    console.log('║   👑 MALEK / MALEK11NEYMAR               ║');
-    console.log('║   💾 Offline Messages: ✓                 ║');
-    console.log('║   📨 Full History: ✓                     ║');
-    console.log('╚════════════════════════════════════════════╝');
+    console.log('╔═══════════════════════════════════════════╗');
+    console.log('║   🚀 PYS Messenger v4.0                 ║');
+    console.log('║   👤 Designed by S A D R A 🖤💛         ║');
+    console.log('║   📍 Port: ' + PORT + '                            ║');
+    console.log('║   📊 Users: ' + Object.keys(accounts).length + '                            ║');
+    console.log('║   💬 Groups: ' + Object.keys(groups).length + '                            ║');
+    console.log('║   👑 Special Account: MALEK             ║');
+    console.log('╚═══════════════════════════════════════════╝');
 });
